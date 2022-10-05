@@ -45,6 +45,9 @@ public class Solver : MonoBehaviour
 
     private int solverFrame = 0;
 
+    private int moveParticleBeginIndex = 0;
+    public int moveParticles = 10;
+
     struct Particle {
         public Vector4 pos; // with pressure.
         public Vector4 vel;
@@ -147,7 +150,7 @@ public class Solver : MonoBehaviour
         hashDebugBuffer = new ComputeBuffer(3, 4);
         hashDebugBuffer.SetData(new uint[3]);
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 11; i++) {
             solverShader.SetBuffer(i, "hashes", hashesBuffer);
             solverShader.SetBuffer(i, "globalHashCounter", globalHashCounterBuffer);
             solverShader.SetBuffer(i, "localIndices", localIndicesBuffer);
@@ -179,6 +182,27 @@ public class Solver : MonoBehaviour
         // Update solver.
         {
             UpdateParams();
+
+            if (Input.GetMouseButton(0)) {
+                Ray mouseRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+                RaycastHit hit;
+                if (Physics.Raycast(mouseRay, out hit)) {
+                    Vector3 pos = new Vector3(
+                        Mathf.Clamp(hit.point.x, minBounds.x, maxBounds.x),
+                        maxBounds.y - 1f,
+                        Mathf.Clamp(hit.point.z, minBounds.z, maxBounds.z)
+                    );
+
+                    solverShader.SetInt("moveBeginIndex", moveParticleBeginIndex);
+                    solverShader.SetInt("moveSize", moveParticles);
+                    solverShader.SetVector("movePos", pos);
+                    solverShader.SetVector("moveVel", Vector3.down * 70);
+
+                    solverShader.Dispatch(solverShader.FindKernel("MoveParticles"), 1, 1, 1);
+
+                    moveParticleBeginIndex = (moveParticleBeginIndex + moveParticles * moveParticles) % numParticles;
+                }
+            }
 
             renderMat.SetColor("primaryColor", primaryColor.linear);
             renderMat.SetColor("secondaryColor", secondaryColor.linear);

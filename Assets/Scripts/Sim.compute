@@ -1,3 +1,4 @@
+#pragma kernel MoveParticles
 #pragma kernel ResetCounter
 #pragma kernel InsertToBucket
 #pragma kernel DebugHash
@@ -41,6 +42,11 @@ float3 maxBounds;
 float poly6Coeff;
 float spikyCoeff;
 float viscoCoeff;
+
+uint moveBeginIndex;
+uint moveSize;
+float3 movePos;
+float3 moveVel;
 
 RWStructuredBuffer<Particle> particles;
 RWStructuredBuffer<Particle> sorted;
@@ -125,6 +131,26 @@ int3 base = floor(pi.pos.xyz / gridScale + gridOffset - 0.5);   \
 
 
 #define END_FOREACH_PARTICLES   }}}}}
+
+[numthreads(1024,1,1)]
+void MoveParticles (uint3 id : SV_DispatchThreadID)
+{
+    uint totalParticlesToMove = moveSize * moveSize;
+
+    const float moveAreaSize = 5.0;
+
+    for (uint x = 0; x < moveSize; x++) {
+        for (uint y = 0; y < moveSize; y++) {
+            uint idx = (moveBeginIndex + x * moveSize + y) % numParticles;
+
+            particles[idx].pos.xyz = movePos + float3(x, 0, y) / moveSize * moveAreaSize - float3(1, 0, 1) * moveAreaSize * 0.5;
+            particles[idx].vel.xyz = moveVel;
+
+            forces[idx] = 0;
+            forces[idx + numParticles] = 0;
+        }
+    }
+}
 
 [numthreads(1024,1,1)]
 void ResetCounter (uint3 id : SV_DispatchThreadID)
@@ -236,7 +262,7 @@ void Step (uint3 id : SV_DispatchThreadID)
         pi.vel.xyz += 0.5 * (prevAcc + currAcc) * deltaTime;
 
         const float eps = 0.001f;
-        const float damping = 0.25f;
+        const float damping = 0.5f;
 
         if (pi.pos.x < minBounds.x) {
             pi.pos.x = minBounds.x + eps;

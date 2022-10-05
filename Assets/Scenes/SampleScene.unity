@@ -318,11 +318,11 @@ MonoBehaviour:
   numParticles: 131072
   initSize: 20
   radius: 1.25
-  gasConstant: 100
+  gasConstant: 80
   restDensity: 1
   mass: 0.1
   density: 1
-  viscosity: 0.15
+  viscosity: 1
   gravity: 9.8
   deltaTime: 0.005
   minBounds: {x: -25, y: 0, z: -25}
@@ -333,6 +333,7 @@ MonoBehaviour:
   particleRenderSize: 0.5
   primaryColor: {r: 0.14344004, g: 0.72460395, b: 0.88, a: 1}
   secondaryColor: {r: 0.12549022, g: 0.2804393, b: 0.8352941, a: 1}
+  moveParticles: 10
 --- !u!114 &963194230
 MonoBehaviour:
   m_ObjectHideFlags: 0
