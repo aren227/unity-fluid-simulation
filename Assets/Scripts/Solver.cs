@@ -28,6 +28,9 @@ public class Solver : MonoBehaviour
     public Mesh particleMesh;
     public float particleRenderSize = 0.5f;
 
+    public Color primaryColor;
+    public Color secondaryColor;
+
     private ComputeBuffer hashesBuffer;
     private ComputeBuffer globalHashCounterBuffer;
     private ComputeBuffer localIndicesBuffer;
@@ -49,8 +52,18 @@ public class Solver : MonoBehaviour
 
     void UpdateParams() {
         // Single grid size is 2*radius.
+
+        // Random flip
+        Vector3 gridScale = new Vector3(
+            Random.Range(0f, 1f) < 0.5f ? 1 : -1,
+            Random.Range(0f, 1f) < 0.5f ? 1 : -1,
+            Random.Range(0f, 1f) < 0.5f ? 1 : -1
+        );
+        // solverShader.SetVector("gridScale", gridScale * radius * 2);
         solverShader.SetVector("gridScale", Vector3.one * radius * 2);
-        solverShader.SetVector("gridOffset", Vector3.zero);
+        solverShader.SetVector("gridOffset", new Vector3(Random.Range(0f,1f),Random.Range(0f,1f),Random.Range(0f,1f)));
+        // solverShader.SetVector("gridOffset", Vector3.zero);
+
 
         solverShader.SetFloat("radiusSqr", radius * radius);
         solverShader.SetFloat("radius", radius);
@@ -62,6 +75,14 @@ public class Solver : MonoBehaviour
         solverShader.SetFloat("deltaTime", deltaTime);
         solverShader.SetVector("minBounds", minBounds);
         solverShader.SetVector("maxBounds", maxBounds);
+
+        float poly6 = 315f / (64f * Mathf.PI * Mathf.Pow(radius, 9f));
+        float spiky = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
+        float visco = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
+
+        solverShader.SetFloat("poly6Coeff", poly6);
+        solverShader.SetFloat("spikyCoeff", spiky);
+        solverShader.SetFloat("viscoCoeff", visco);
     }
 
     void Start() {
@@ -159,6 +180,9 @@ public class Solver : MonoBehaviour
         {
             UpdateParams();
 
+            renderMat.SetColor("primaryColor", primaryColor.linear);
+            renderMat.SetColor("secondaryColor", secondaryColor.linear);
+
             solverShader.SetInt("frameNumber", solverFrame++);
 
             solverShader.Dispatch(solverShader.FindKernel("ResetCounter"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
@@ -190,9 +214,13 @@ public class Solver : MonoBehaviour
 
             solverShader.Dispatch(solverShader.FindKernel("PrefixSum3"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
             solverShader.Dispatch(solverShader.FindKernel("Sort"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-            solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-            solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-            solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+
+            for (int iter = 0; iter < 1; iter++) {
+                solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+            }
+
         }
 
         Graphics.DrawMeshInstancedIndirect(

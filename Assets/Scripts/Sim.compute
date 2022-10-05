@@ -38,6 +38,10 @@ float deltaTime;
 float3 minBounds;
 float3 maxBounds;
 
+float poly6Coeff;
+float spikyCoeff;
+float viscoCoeff;
+
 RWStructuredBuffer<Particle> particles;
 RWStructuredBuffer<Particle> sorted;
 
@@ -88,16 +92,16 @@ uint calculateHash(int3 normed) {
     return h;
 }
 
-float poly6(float3 x) {
-    return 315.0 / (64.0 * PI * pow(radius, 9)) * pow(radiusSqr - dot(x, x), 3);
+float poly6(float d) {
+    return poly6Coeff * pow(radiusSqr - d, 3);
 }
 
-float spiky(float3 x) {
-    return 45.0 / (PI * pow(radius, 6)) * pow(radius - length(x), 2);
+float spiky(float l) {
+    return spikyCoeff * pow(radius - l, 2);
 }
 
-float visco(float3 x) {
-    return 45.0 / (PI * pow(radius, 6)) * (radius - length(x));
+float visco(float l) {
+    return viscoCoeff * (radius - l);
 }
 
 // If grid size is 2 * radius, we can cover all near particles accurately by searching 2x2x2 grid.
@@ -109,10 +113,16 @@ int3 base = floor(pi.pos.xyz / gridScale + gridOffset - 0.5);   \
             uint h = calculateHash(base + int3(dx, dy, dz));    \
             uint begin = h > 0 ? globalHashCounter[h-1] : 0;    \
             uint end = globalHashCounter[h];                    \
+            const uint maxIter = 256;                           \
+            uint cnt = end - begin;                             \
+            float scaleFactor = max((float)(end - begin) / maxIter, 1); \
+            end = min(end, begin + maxIter);                    \
             for (uint i = begin; i < end; i++) {                \
                 Particle pj = sorted[i];                        \
                 float3 diff = pi.pos.xyz - pj.pos.xyz;          \
-                if (dot(diff, diff) < radiusSqr) {              \
+                float d = dot(diff, diff);                      \
+                if (d < radiusSqr) {                            \
+
 
 #define END_FOREACH_PARTICLES   }}}}}
 
@@ -173,10 +183,13 @@ void CalcPressure (uint3 id : SV_DispatchThreadID)
     if (id.x < numParticles) {
         Particle pi = sorted[id.x];
 
+        // float density = mass * poly6(0);
         float density = 0;
 
         BEGIN_FOREACH_PARTICLES
-            density += mass * poly6(diff);
+            // if (d > 0) {
+                density += mass * poly6(d) * scaleFactor;
+            // }
         END_FOREACH_PARTICLES
 
         sorted[id.x].pos.w = density;
@@ -194,11 +207,12 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
         float3 force = 0;
 
         BEGIN_FOREACH_PARTICLES
-            if (dot(diff, diff) > 0.0001) {
+            if (d > 0) {
+                float l = sqrt(d);
                 // Pressure
-                force += mass * (pi.vel.w + pj.vel.w) / (2*pj.pos.w) * spiky(diff) * normalize(diff);
+                force += mass * (pi.vel.w + pj.vel.w) / (2*pj.pos.w) * spiky(l) * normalize(diff) * scaleFactor;
                 // Viscosity
-                force += viscosity * mass * (pj.vel - pi.vel).xyz / (pj.pos.w) * visco(diff);
+                force += viscosity * mass / (pj.pos.w) * visco(l) * (pj.vel - pi.vel).xyz * scaleFactor;
             }
         END_FOREACH_PARTICLES
 
@@ -221,8 +235,8 @@ void Step (uint3 id : SV_DispatchThreadID)
         pi.pos.xyz += pi.vel.xyz * deltaTime + 0.5 * prevAcc * deltaTime * deltaTime;
         pi.vel.xyz += 0.5 * (prevAcc + currAcc) * deltaTime;
 
-        const float eps = 0.01f;
-        const float damping = 0.5f;
+        const float eps = 0.001f;
+        const float damping = 0.2f;
 
         if (pi.pos.x < minBounds.x) {
             pi.pos.x = minBounds.x + eps;

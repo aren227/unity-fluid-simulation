@@ -25,6 +25,9 @@ Shader "Spheres"
 
             float radius;
 
+            fixed4 primaryColor;
+            fixed4 secondaryColor;
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -35,6 +38,7 @@ Shader "Spheres"
                 float4 vertex : SV_POSITION;
                 float3 rayDir : TEXCOORD0;
                 float4 spherePos : TEXCOORD1;
+                float3 vel : TEXCOORD2;
             };
 
             // https://www.iquilezles.org/www/articles/spherefunctions/spherefunctions.htm
@@ -69,6 +73,7 @@ Shader "Spheres"
                 o.vertex = mul(UNITY_MATRIX_VP, float4(worldPos, 1));
                 o.rayDir = normalize(worldPos - _WorldSpaceCameraPos.xyz);
                 o.spherePos = float4(spherePos, particles[id].pos.w); // Add density values.
+                o.vel = particles[id].vel.xyz;
                 return o;
             }
 
@@ -82,18 +87,22 @@ Shader "Spheres"
                 float3 hitPos = rayOrigin + rayDir * rayHit;
                 float3 normal = normalize(hitPos - i.spherePos.xyz);
                 float light = max(dot(normal, _WorldSpaceLightPos0.xyz), 0);
-                light = lerp(0.25, 1, light);
+                light = lerp(0.7, 1, light);
 
                 float density = saturate(invlerp(0, 1, i.spherePos.w));
 
 
-                float3 col = 0;
-                if (density < 0.5) {
-                    col = lerp(float3(0,0,1), float3(0,1,0), density*2);
-                }
-                else {
-                    col = lerp(float3(0,1,0), float3(1,0,0), (density-0.5)*2);
-                }
+                // float3 col = 0;
+                // if (density < 0.5) {
+                //     col = lerp(float3(0,0,1), float3(0,1,0), density*2);
+                // }
+                // else {
+                //     col = lerp(float3(0,1,0), float3(1,0,0), (density-0.5)*2);
+                // }
+
+                float3 col = lerp(primaryColor, secondaryColor, density);
+
+                col = lerp(col, float3(1,1,1), saturate(invlerp(10, 30, length(i.vel))));
 
                 return fixed4(col * light, 1);
             }
