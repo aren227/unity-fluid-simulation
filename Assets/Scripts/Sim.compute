@@ -1,26 +1,254 @@
-#pragma kernel CSMain
+#pragma kernel ResetCounter
+#pragma kernel InsertToBucket
+#pragma kernel DebugHash
+#pragma kernel PrefixSum1
+#pragma kernel PrefixSum2
+#pragma kernel PrefixSum3
+#pragma kernel Sort
+#pragma kernel CalcPressure
+#pragma kernel CalcForces
+#pragma kernel Step
+
+#define PI 3.1415926535
 
 float3 gridScale;
 float3 gridOffset;
 uint numHash; // Should be power of two.
 
 struct Particle {
-    float3 pos;
-    float3 vel;
+    float4 pos; // with density as w component.
+    float4 vel; // with pressure as w component.
 };
+
+RWStructuredBuffer<uint> hashes;
+RWStructuredBuffer<uint> localIndices;
+RWStructuredBuffer<uint> inverseIndices;
+
+uint numParticles;
+
+float radiusSqr;
+float radius;
+float gasConst;
+float restDensity;
+float mass;
+float viscosity;
+float gravity;
+float deltaTime;
+
+float3 minBounds;
+float3 maxBounds;
 
 RWStructuredBuffer<Particle> particles;
 RWStructuredBuffer<Particle> sorted;
 
-uint hash(float3 pos) {
-    int3 normed = floor((pos / gridScale + gridOffset);
-    int h = (normed.x*normed.y*normed.z) + (normed.x^normed.y^normed.z) + int(sin(normed.x)*12345) + int(cos(normed.y)*12345) + int(tan(normed.z)*12345);
-    h &= (numHash-1);
-    return (uint)h;
+// Double buffered for leapfrog integration.
+RWStructuredBuffer<float4> forces;
+uint frameNumber;
+
+#define PREFIX_SUM_ARRAY_NAME globalHashCounter
+
+#include "PrefixSum.cginc"
+
+RWStructuredBuffer<uint> hashDebug;
+
+uint calculateHash(int3 normed) {
+    // Calculate FNV hash.
+    // @Todo: Find more appropriate hash function.
+    uint h = 0x811c9dc5U;
+
+    h = h ^ ((normed.x >> 0) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.x >> 8) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.x >> 16) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.x >> 24) & 255);
+    h = h * 0x01000193;
+
+    h = h ^ ((normed.y >> 0) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.y >> 8) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.y >> 16) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.y >> 24) & 255);
+    h = h * 0x01000193;
+
+    h = h ^ ((normed.z >> 0) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.z >> 8) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.z >> 16) & 255);
+    h = h * 0x01000193;
+    h = h ^ ((normed.z >> 24) & 255);
+    h = h * 0x01000193;
+
+    h = h & (numHash-1);
+
+    return h;
 }
 
-[numthreads(8,8,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
-{
+float poly6(float3 x) {
+    return 315.0 / (64.0 * PI * pow(radius, 9)) * pow(radiusSqr - dot(x, x), 3);
+}
 
+float spiky(float3 x) {
+    return 45.0 / (PI * pow(radius, 6)) * pow(radius - length(x), 2);
+}
+
+float visco(float3 x) {
+    return 45.0 / (PI * pow(radius, 6)) * (radius - length(x));
+}
+
+// If grid size is 2 * radius, we can cover all near particles accurately by searching 2x2x2 grid.
+#define BEGIN_FOREACH_PARTICLES                                 \
+int3 base = floor(pi.pos.xyz / gridScale + gridOffset - 0.5);   \
+[unroll] for (int dx = 0; dx < 2; dx++) {                       \
+    [unroll] for (int dy = 0; dy < 2; dy++) {                   \
+        [unroll] for (int dz = 0; dz < 2; dz++) {               \
+            uint h = calculateHash(base + int3(dx, dy, dz));    \
+            uint begin = h > 0 ? globalHashCounter[h-1] : 0;    \
+            uint end = globalHashCounter[h];                    \
+            for (uint i = begin; i < end; i++) {                \
+                Particle pj = sorted[i];                        \
+                float3 diff = pi.pos.xyz - pj.pos.xyz;          \
+                if (dot(diff, diff) < radiusSqr) {              \
+
+#define END_FOREACH_PARTICLES   }}}}}
+
+[numthreads(1024,1,1)]
+void ResetCounter (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numHash) {
+        globalHashCounter[id.x] = 0;
+    }
+}
+
+[numthreads(1024,1,1)]
+void InsertToBucket (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numParticles) {
+        int3 normed = floor(particles[id.x].pos.xyz / gridScale + gridOffset);
+        uint h = calculateHash(normed);
+        hashes[id.x] = h;
+
+        uint localIndex;
+        InterlockedAdd(globalHashCounter[h], 1, localIndex);
+
+        localIndices[id.x] = localIndex;
+    }
+}
+
+[numthreads(1024,1,1)]
+void DebugHash (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numHash) {
+        if (globalHashCounter[id.x] > 0) {
+            InterlockedAdd(hashDebug[0], 1);
+            InterlockedMax(hashDebug[1], globalHashCounter[id.x]);
+        }
+    }
+}
+
+[numthreads(1024,1,1)]
+void Sort (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numParticles) {
+        uint sortedIndex = 0;
+        uint h = hashes[id.x];
+        if (h > 0) {
+            sortedIndex += globalHashCounter[h-1];
+        }
+        sortedIndex += localIndices[id.x];
+
+        sorted[sortedIndex] = particles[id.x];
+
+        inverseIndices[sortedIndex] = id.x;
+    }
+}
+
+[numthreads(1024,1,1)]
+void CalcPressure (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numParticles) {
+        Particle pi = sorted[id.x];
+
+        float density = 0;
+
+        BEGIN_FOREACH_PARTICLES
+            density += mass * poly6(diff);
+        END_FOREACH_PARTICLES
+
+        sorted[id.x].pos.w = density;
+        // Clamp negative pressure. This happens when a particle has a few neighbors.
+        sorted[id.x].vel.w = max(gasConst * (density - restDensity), 0);
+    }
+}
+
+[numthreads(1024,1,1)]
+void CalcForces (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numParticles) {
+        Particle pi = sorted[id.x];
+
+        float3 force = 0;
+
+        BEGIN_FOREACH_PARTICLES
+            if (dot(diff, diff) > 0.0001) {
+                // Pressure
+                force += mass * (pi.vel.w + pj.vel.w) / (2*pj.pos.w) * spiky(diff) * normalize(diff);
+                // Viscosity
+                force += viscosity * mass * (pj.vel - pi.vel).xyz / (pj.pos.w) * visco(diff);
+            }
+        END_FOREACH_PARTICLES
+
+        // Gravity
+        force += mass * gravity * float3(0,-1,0);
+
+        forces[id.x + (frameNumber&1) * numParticles].xyz = force;
+    }
+}
+
+[numthreads(1024,1,1)]
+void Step (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numParticles) {
+        Particle pi = sorted[id.x];
+
+        float3 prevAcc = forces[id.x + ((~frameNumber)&1) * numParticles].xyz / mass;
+        float3 currAcc = forces[id.x + (frameNumber&1) * numParticles].xyz / mass;
+
+        pi.pos.xyz += pi.vel.xyz * deltaTime + 0.5 * prevAcc * deltaTime * deltaTime;
+        pi.vel.xyz += 0.5 * (prevAcc + currAcc) * deltaTime;
+
+        const float eps = 0.01f;
+        const float damping = 0.5f;
+
+        if (pi.pos.x < minBounds.x) {
+            pi.pos.x = minBounds.x + eps;
+            pi.vel.x = abs(pi.vel.x) * damping;
+        }
+        if (pi.pos.y < minBounds.y) {
+            pi.pos.y = minBounds.y + eps;
+            pi.vel.y = abs(pi.vel.y) * damping;
+        }
+        if (pi.pos.z < minBounds.z) {
+            pi.pos.z = minBounds.z + eps;
+            pi.vel.z = abs(pi.vel.z) * damping;
+        }
+        if (pi.pos.x > maxBounds.x) {
+            pi.pos.x = maxBounds.x - eps;
+            pi.vel.x = -abs(pi.vel.x) * damping;
+        }
+        if (pi.pos.y > maxBounds.y) {
+            pi.pos.y = maxBounds.y - eps;
+            pi.vel.y = -abs(pi.vel.y) * damping;
+        }
+        if (pi.pos.z > maxBounds.z) {
+            pi.pos.z = maxBounds.z - eps;
+            pi.vel.z = -abs(pi.vel.z) * damping;
+        }
+
+        particles[inverseIndices[id.x]] = pi;
+    }
 }
