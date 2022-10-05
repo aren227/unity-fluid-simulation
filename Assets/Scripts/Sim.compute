@@ -1,0 +1,26 @@
+#pragma kernel CSMain
+
+float3 gridScale;
+float3 gridOffset;
+uint numHash; // Should be power of two.
+
+struct Particle {
+    float3 pos;
+    float3 vel;
+};
+
+RWStructuredBuffer<Particle> particles;
+RWStructuredBuffer<Particle> sorted;
+
+uint hash(float3 pos) {
+    int3 normed = floor((pos / gridScale + gridOffset);
+    int h = (normed.x*normed.y*normed.z) + (normed.x^normed.y^normed.z) + int(sin(normed.x)*12345) + int(cos(normed.y)*12345) + int(tan(normed.z)*12345);
+    h &= (numHash-1);
+    return (uint)h;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+
+}
