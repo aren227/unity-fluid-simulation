@@ -12,6 +12,12 @@
 
 #define PI 3.1415926535
 
+// 2 is the optimal value, according to my experiment.
+// If this value is too small, the number of particles per one grid cell increases. (Inefficient)
+// If this value is too large, the number of grid cells to check increases. (Overhead)
+// Also note that, unrolling all three loops make the performance worse! (Why?)
+#define GRIDS_PER_DIAMETER    2
+
 float3 gridScale;
 float3 gridOffset;
 uint numHash; // Should be power of two.
@@ -110,24 +116,23 @@ float visco(float l) {
     return viscoCoeff * (radius - l);
 }
 
-// If grid size is 2 * radius, we can cover all near particles accurately by searching 2x2x2 grid.
-#define BEGIN_FOREACH_PARTICLES                                 \
-int3 base = floor(pi.pos.xyz / gridScale + gridOffset - 0.5);   \
-[unroll] for (int dx = 0; dx < 2; dx++) {                       \
-    [unroll] for (int dy = 0; dy < 2; dy++) {                   \
-        [unroll] for (int dz = 0; dz < 2; dz++) {               \
-            uint h = calculateHash(base + int3(dx, dy, dz));    \
-            uint begin = h > 0 ? globalHashCounter[h-1] : 0;    \
-            uint end = globalHashCounter[h];                    \
-            const uint maxIter = 256;                           \
-            uint cnt = end - begin;                             \
+#define BEGIN_FOREACH_PARTICLES                                         \
+int3 base = floor(GRIDS_PER_DIAMETER/2.0 * (pi.pos.xyz / radius - 1));  \
+for (int dx = 0; dx < GRIDS_PER_DIAMETER+1; dx++) {                     \
+    for (int dy = 0; dy < GRIDS_PER_DIAMETER+1; dy++) {                 \
+        for (int dz = 0; dz < GRIDS_PER_DIAMETER+1; dz++) {             \
+            uint h = calculateHash(base + int3(dx, dy, dz));            \
+            uint begin = h > 0 ? globalHashCounter[h-1] : 0;            \
+            uint end = globalHashCounter[h];                            \
+            const uint maxIter = 2048;                                  \
+            uint cnt = end - begin;                                     \
             float scaleFactor = max((float)(end - begin) / maxIter, 1); \
-            end = min(end, begin + maxIter);                    \
-            for (uint i = begin; i < end; i++) {                \
-                Particle pj = sorted[i];                        \
-                float3 diff = pi.pos.xyz - pj.pos.xyz;          \
-                float d = dot(diff, diff);                      \
-                if (d < radiusSqr) {                            \
+            end = min(end, begin + maxIter);                            \
+            for (uint i = begin; i < end; i++) {                        \
+                Particle pj = sorted[i];                                \
+                float3 diff = pi.pos.xyz - pj.pos.xyz;                  \
+                float d = dot(diff, diff);                              \
+                if (d < radiusSqr) {                                    \
 
 
 #define END_FOREACH_PARTICLES   }}}}}
@@ -164,7 +169,7 @@ void ResetCounter (uint3 id : SV_DispatchThreadID)
 void InsertToBucket (uint3 id : SV_DispatchThreadID)
 {
     if (id.x < numParticles) {
-        int3 normed = floor(particles[id.x].pos.xyz / gridScale + gridOffset);
+        int3 normed = floor(GRIDS_PER_DIAMETER/2.0 * (particles[id.x].pos.xyz / radius));
         uint h = calculateHash(normed);
         hashes[id.x] = h;
 

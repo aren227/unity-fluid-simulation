@@ -318,13 +318,13 @@ MonoBehaviour:
   numParticles: 131072
   initSize: 20
   radius: 1.25
-  gasConstant: 80
+  gasConstant: 10
   restDensity: 1
   mass: 0.1
   density: 1
-  viscosity: 1
+  viscosity: 0.1
   gravity: 9.8
-  deltaTime: 0.005
+  deltaTime: 0.01
   minBounds: {x: -25, y: 0, z: -25}
   maxBounds: {x: 25, y: 50, z: 25}
   solverShader: {fileID: 7200000, guid: f4000e3305ec3b14b8f7b31781bb32dd, type: 3}
