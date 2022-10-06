@@ -278,7 +278,7 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
         // Gravity
         force += mass * gravity * float3(0,-1,0);
 
-        forces[inverseIndices[id.x] + (frameNumber&1) * numParticles].xyz = force;
+        forces[id.x].xyz = force;
     }
 }
 
@@ -288,11 +288,9 @@ void Step (uint3 id : SV_DispatchThreadID)
     if (id.x < numParticles) {
         Particle pi = sorted[id.x];
 
-        float3 prevAcc = forces[inverseIndices[id.x] + ((~frameNumber)&1) * numParticles].xyz / mass;
-        float3 currAcc = forces[inverseIndices[id.x] + (frameNumber&1) * numParticles].xyz / mass;
+        float3 currAcc = forces[id.x].xyz / mass;
 
-        pi.pos.xyz += pi.vel.xyz * deltaTime + 0.5 * prevAcc * deltaTime * deltaTime;
-        pi.vel.xyz += 0.5 * (prevAcc + currAcc) * deltaTime;
+        pi.vel.xyz += currAcc * deltaTime;
 
         const float eps = 0.001f;
         const float damping = 0.5f;
@@ -321,6 +319,8 @@ void Step (uint3 id : SV_DispatchThreadID)
             pi.pos.z = maxBounds.z - eps;
             pi.vel.z = -abs(pi.vel.z) * damping;
         }
+
+        pi.pos.xyz += pi.vel.xyz * deltaTime;
 
         particles[inverseIndices[id.x]] = pi;
     }
