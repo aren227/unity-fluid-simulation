@@ -67,40 +67,68 @@ uint frameNumber;
 
 RWStructuredBuffer<uint> hashDebug;
 
+uint3 murmur_32_scramble(uint3 k) {
+    k *= 0xcc9e2d51;
+    k = (k << 15) | (k >> 17);
+    k *= 0x1b873593;
+    return k;
+}
+
 uint calculateHash(int3 normed) {
-    // Calculate FNV hash.
-    // @Todo: Find more appropriate hash function.
-    uint h = 0x811c9dc5U;
+    // Murmur3
+    // ~27 collision
+    uint h = 0; // seed
 
-    h = h ^ ((normed.x >> 0) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.x >> 8) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.x >> 16) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.x >> 24) & 255);
-    h = h * 0x01000193;
+    uint3 scrambled = murmur_32_scramble(normed);
 
-    h = h ^ ((normed.y >> 0) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.y >> 8) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.y >> 16) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.y >> 24) & 255);
-    h = h * 0x01000193;
+    h ^= scrambled.x;
+    h = (h << 13) | (h >> 19);
+    h = h * 5 + 0xe6546b64U;
 
-    h = h ^ ((normed.z >> 0) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.z >> 8) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.z >> 16) & 255);
-    h = h * 0x01000193;
-    h = h ^ ((normed.z >> 24) & 255);
-    h = h * 0x01000193;
+    h ^= scrambled.y;
+    h = (h << 13) | (h >> 19);
+    h = h * 5 + 0xe6546b64U;
+
+    h ^= scrambled.z;
+    h = (h << 13) | (h >> 19);
+    h = h * 5 + 0xe6546b64U;
+
+    // Simple xor
+    // ~33 collision
+    // uint h = 73856093 * normed.x ^ 19349663 * normed.y ^ 83492791 * normed.z;
+
+    // FNV-1a
+    // ~27 collision
+    // uint h = 0x811c9dc5U;
+
+    // h = h ^ ((normed.x >> 0) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.x >> 8) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.x >> 16) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.x >> 24) & 255);
+    // h = h * 0x01000193;
+
+    // h = h ^ ((normed.y >> 0) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.y >> 8) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.y >> 16) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.y >> 24) & 255);
+    // h = h * 0x01000193;
+
+    // h = h ^ ((normed.z >> 0) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.z >> 8) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.z >> 16) & 255);
+    // h = h * 0x01000193;
+    // h = h ^ ((normed.z >> 24) & 255);
+    // h = h * 0x01000193;
 
     h = h & (numHash-1);
-
     return h;
 }
 

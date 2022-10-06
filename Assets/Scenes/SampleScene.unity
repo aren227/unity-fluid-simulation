@@ -315,9 +315,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7632611a3bb3d1244804dcbf01056fb5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  numParticles: 131072
-  initSize: 20
-  radius: 1.25
+  numParticles: 262144
+  initSize: 25
+  radius: 1
   gasConstant: 10
   restDensity: 1
   mass: 0.1
@@ -325,8 +325,8 @@ MonoBehaviour:
   viscosity: 0.1
   gravity: 9.8
   deltaTime: 0.01
-  minBounds: {x: -25, y: 0, z: -25}
-  maxBounds: {x: 25, y: 50, z: 25}
+  minBounds: {x: -30, y: 0, z: -30}
+  maxBounds: {x: 30, y: 50, z: 30}
   solverShader: {fileID: 7200000, guid: f4000e3305ec3b14b8f7b31781bb32dd, type: 3}
   renderShader: {fileID: 4800000, guid: d422c3fc5e6461b4da80424ed4deb459, type: 3}
   particleMesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
