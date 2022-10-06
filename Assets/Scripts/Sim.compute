@@ -75,27 +75,36 @@ uint3 murmur_32_scramble(uint3 k) {
 }
 
 uint calculateHash(int3 normed) {
+    uint h = (normed.z & 255) | ((normed.y & 15) << 8) | ((normed.x & 255) << 12);
+
+    // uint h = ((normed.z & 7) << 0) | ((normed.y & 7) << 3) | ((normed.x & 7) << 6);
+    // normed >>= 3;
+    // h |= ((normed.z & 15) << 9) | ((normed.y & 7) << 13) | ((normed.x & 15) << 16);
+
     // Murmur3
     // ~27 collision
-    uint h = 0; // seed
+    // uint h = 0; // seed
 
-    uint3 scrambled = murmur_32_scramble(normed);
+    // uint3 scrambled = murmur_32_scramble(normed);
 
-    h ^= scrambled.x;
-    h = (h << 13) | (h >> 19);
-    h = h * 5 + 0xe6546b64U;
+    // h ^= scrambled.x;
+    // h = (h << 13) | (h >> 19);
+    // h = h * 5 + 0xe6546b64U;
 
-    h ^= scrambled.y;
-    h = (h << 13) | (h >> 19);
-    h = h * 5 + 0xe6546b64U;
+    // h ^= scrambled.y;
+    // h = (h << 13) | (h >> 19);
+    // h = h * 5 + 0xe6546b64U;
 
-    h ^= scrambled.z;
-    h = (h << 13) | (h >> 19);
-    h = h * 5 + 0xe6546b64U;
+    // h ^= scrambled.z;
+    // h = (h << 13) | (h >> 19);
+    // h = h * 5 + 0xe6546b64U;
+
+    // h &= (numHash-1);
 
     // Simple xor
     // ~33 collision
     // uint h = 73856093 * normed.x ^ 19349663 * normed.y ^ 83492791 * normed.z;
+    // h &= (numHash-1);
 
     // FNV-1a
     // ~27 collision
@@ -128,7 +137,7 @@ uint calculateHash(int3 normed) {
     // h = h ^ ((normed.z >> 24) & 255);
     // h = h * 0x01000193;
 
-    h = h & (numHash-1);
+    // h = h & (numHash-1);
     return h;
 }
 
@@ -152,10 +161,6 @@ for (int dx = 0; dx < GRIDS_PER_DIAMETER+1; dx++) {                     \
             uint h = calculateHash(base + int3(dx, dy, dz));            \
             uint begin = h > 0 ? globalHashCounter[h-1] : 0;            \
             uint end = globalHashCounter[h];                            \
-            const uint maxIter = 2048;                                  \
-            uint cnt = end - begin;                                     \
-            float scaleFactor = max((float)(end - begin) / maxIter, 1); \
-            end = min(end, begin + maxIter);                            \
             for (uint i = begin; i < end; i++) {                        \
                 Particle pj = sorted[i];                                \
                 float3 diff = pi.pos.xyz - pj.pos.xyz;                  \
@@ -247,9 +252,11 @@ void CalcPressure (uint3 id : SV_DispatchThreadID)
 
         BEGIN_FOREACH_PARTICLES
             // if (d > 0) {
-                density += mass * poly6(d) * scaleFactor;
+                density += poly6(d);
             // }
         END_FOREACH_PARTICLES
+
+        density *= mass;
 
         sorted[id.x].pos.w = density;
         // Clamp negative pressure. This happens when a particle has a few neighbors.
@@ -269,14 +276,16 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
             if (d > 0) {
                 float l = sqrt(d);
                 // Pressure
-                force += mass * (pi.vel.w + pj.vel.w) / (2*pj.pos.w) * spiky(l) * normalize(diff) * scaleFactor;
+                force += (pi.vel.w + pj.vel.w) / (2*pj.pos.w * l) * spiky(l) * diff;
                 // Viscosity
-                force += viscosity * mass / (pj.pos.w) * visco(l) * (pj.vel - pi.vel).xyz * scaleFactor;
+                force += viscosity / pj.pos.w * visco(l) * (pj.vel - pi.vel).xyz;
             }
         END_FOREACH_PARTICLES
 
         // Gravity
-        force += mass * gravity * float3(0,-1,0);
+        force += gravity * float3(0,-1,0);
+
+        force *= mass;
 
         forces[id.x].xyz = force;
     }
@@ -322,6 +331,7 @@ void Step (uint3 id : SV_DispatchThreadID)
 
         pi.pos.xyz += pi.vel.xyz * deltaTime;
 
-        particles[inverseIndices[id.x]] = pi;
+        // particles[inverseIndices[id.x]] = pi;
+        particles[id.x] = pi;
     }
 }
