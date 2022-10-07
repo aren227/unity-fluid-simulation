@@ -40,6 +40,8 @@ public class Solver : MonoBehaviour
     private ComputeBuffer forcesBuffer;
     private ComputeBuffer groupArrBuffer;
     private ComputeBuffer hashDebugBuffer;
+    private ComputeBuffer meanBuffer;
+    private ComputeBuffer principleBuffer;
 
     private ComputeBuffer drawInstancedArgsBuffer;
 
@@ -177,6 +179,9 @@ public class Solver : MonoBehaviour
 
         hashDebugBuffer = new ComputeBuffer(3, 4);
 
+        meanBuffer = new ComputeBuffer(numParticles, 4 * 3);
+        principleBuffer = new ComputeBuffer(numParticles * 4, 4 * 3);
+
         for (int i = 0; i < 11; i++) {
             solverShader.SetBuffer(i, "hashes", hashesBuffer);
             solverShader.SetBuffer(i, "globalHashCounter", globalHashCounterBuffer);
@@ -187,10 +192,13 @@ public class Solver : MonoBehaviour
             solverShader.SetBuffer(i, "forces", forcesBuffer);
             solverShader.SetBuffer(i, "groupArr", groupArrBuffer);
             solverShader.SetBuffer(i, "hashDebug", hashDebugBuffer);
+            solverShader.SetBuffer(i, "mean", meanBuffer);
+            solverShader.SetBuffer(i, "principle", principleBuffer);
         }
 
         renderMat = new Material(renderShader);
         renderMat.SetBuffer("particles", particlesBuffer);
+        renderMat.SetBuffer("principle", principleBuffer);
         renderMat.SetFloat("radius", particleRenderSize * 0.5f);
 
         drawInstancedArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
@@ -301,6 +309,8 @@ public class Solver : MonoBehaviour
         forcesBuffer.Dispose();
         groupArrBuffer.Dispose();
         hashDebugBuffer.Dispose();
+        meanBuffer.Dispose();
+        principleBuffer.Dispose();
 
         drawInstancedArgsBuffer.Dispose();
     }
