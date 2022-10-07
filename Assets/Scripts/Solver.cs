@@ -48,44 +48,64 @@ public class Solver : MonoBehaviour
     private int moveParticleBeginIndex = 0;
     public int moveParticles = 10;
 
+    private double lastFrameTimestamp = 0;
+    private double totalFrameTime = 0;
+
+    // @Temp: Just for fun.
+    private int boundsState = 0;
+    private float waveTime = 0;
+    private Vector4[] boxPlanes = new Vector4[7];
+    private Vector4[] wavePlanes = new Vector4[7];
+    private Vector4[] groundPlanes = new Vector4[7];
+
     struct Particle {
         public Vector4 pos; // with pressure.
         public Vector4 vel;
     }
 
+    Vector4 GetPlaneEq(Vector3 p, Vector3 n) {
+        return new Vector4(n.x, n.y, n.z, -Vector3.Dot(p, n));
+    }
+
     void UpdateParams() {
-        // Single grid size is 2*radius.
+        if (Input.GetKeyDown(KeyCode.X)) {
+            boundsState++;
+        }
 
-        // Random flip
-        Vector3 gridScale = new Vector3(
-            Random.Range(0f, 1f) < 0.5f ? 1 : -1,
-            Random.Range(0f, 1f) < 0.5f ? 1 : -1,
-            Random.Range(0f, 1f) < 0.5f ? 1 : -1
-        );
-        // solverShader.SetVector("gridScale", gridScale * radius * 2);
-        solverShader.SetVector("gridScale", Vector3.one * radius * 2);
-        solverShader.SetVector("gridOffset", new Vector3(Random.Range(0f,1f),Random.Range(0f,1f),Random.Range(0f,1f)));
-        // solverShader.SetVector("gridOffset", Vector3.zero);
+        Vector4[] currPlanes;
+        switch (boundsState) {
+            case 0: currPlanes = boxPlanes;
+            break;
 
+            case 1: currPlanes = wavePlanes;
+            break;
 
-        solverShader.SetFloat("radiusSqr", radius * radius);
-        solverShader.SetFloat("radius", radius);
-        solverShader.SetFloat("gasConst", gasConstant);
-        solverShader.SetFloat("restDensity", restDensity);
-        solverShader.SetFloat("mass", mass);
-        solverShader.SetFloat("viscosity", viscosity);
-        solverShader.SetFloat("gravity", gravity);
-        solverShader.SetFloat("deltaTime", deltaTime);
-        solverShader.SetVector("minBounds", minBounds);
-        solverShader.SetVector("maxBounds", maxBounds);
+            default: currPlanes = groundPlanes;
+            break;
+        }
 
-        float poly6 = 315f / (64f * Mathf.PI * Mathf.Pow(radius, 9f));
-        float spiky = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
-        float visco = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
+        if (currPlanes == wavePlanes) {
+            waveTime += Time.deltaTime;
+        }
 
-        solverShader.SetFloat("poly6Coeff", poly6);
-        solverShader.SetFloat("spikyCoeff", spiky);
-        solverShader.SetFloat("viscoCoeff", visco);
+        boxPlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
+        boxPlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
+        boxPlanes[2] = GetPlaneEq(new Vector3(-50, 0, 0), Vector3.right);
+        boxPlanes[3] = GetPlaneEq(new Vector3(50, 0, 0), Vector3.left);
+        boxPlanes[4] = GetPlaneEq(new Vector3(0, 0, -50), Vector3.forward);
+        boxPlanes[5] = GetPlaneEq(new Vector3(0, 0, 50), Vector3.back);
+
+        wavePlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
+        wavePlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
+        wavePlanes[2] = GetPlaneEq(new Vector3(-50 + Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f, 0, 0), Vector3.right);
+        wavePlanes[3] = GetPlaneEq(new Vector3(50 - Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f, 0, 0), Vector3.left);
+        wavePlanes[4] = GetPlaneEq(new Vector3(0, 0, -50 + Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f), Vector3.forward);
+        wavePlanes[5] = GetPlaneEq(new Vector3(0, 0, 50 - Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f), Vector3.back);
+
+        groundPlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
+        groundPlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
+
+        solverShader.SetVectorArray("planes", currPlanes);
     }
 
     void Start() {
@@ -93,14 +113,14 @@ public class Solver : MonoBehaviour
 
         // Two dam break situation.
         Vector3 origin1 = new Vector3(
-            Mathf.Lerp(minBounds.x, maxBounds.x, 0.33f),
+            Mathf.Lerp(minBounds.x, maxBounds.x, 0.25f),
             minBounds.y + initSize * 0.5f,
-            Mathf.Lerp(minBounds.z, maxBounds.z, 0.33f)
+            Mathf.Lerp(minBounds.z, maxBounds.z, 0.25f)
         );
         Vector3 origin2 = new Vector3(
-            Mathf.Lerp(minBounds.x, maxBounds.x, 0.66f),
+            Mathf.Lerp(minBounds.x, maxBounds.x, 0.75f),
             minBounds.y + initSize * 0.5f,
-            Mathf.Lerp(minBounds.z, maxBounds.z, 0.66f)
+            Mathf.Lerp(minBounds.z, maxBounds.z, 0.75f)
         );
 
         for (int i = 0; i < numParticles; i++) {
@@ -117,6 +137,23 @@ public class Solver : MonoBehaviour
 
         solverShader.SetInt("numHash", numHashes);
         solverShader.SetInt("numParticles", numParticles);
+
+        solverShader.SetFloat("radiusSqr", radius * radius);
+        solverShader.SetFloat("radius", radius);
+        solverShader.SetFloat("gasConst", gasConstant);
+        solverShader.SetFloat("restDensity", restDensity);
+        solverShader.SetFloat("mass", mass);
+        solverShader.SetFloat("viscosity", viscosity);
+        solverShader.SetFloat("gravity", gravity);
+        solverShader.SetFloat("deltaTime", deltaTime);
+
+        float poly6 = 315f / (64f * Mathf.PI * Mathf.Pow(radius, 9f));
+        float spiky = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
+        float visco = 45f / (Mathf.PI * Mathf.Pow(radius, 6f));
+
+        solverShader.SetFloat("poly6Coeff", poly6);
+        solverShader.SetFloat("spikyCoeff", spiky);
+        solverShader.SetFloat("viscoCoeff", visco);
 
         UpdateParams();
 
@@ -139,9 +176,8 @@ public class Solver : MonoBehaviour
         sortedBuffer = new ComputeBuffer(numParticles, 4 * 8);
         sortedBuffer.SetData(new Particle[numParticles]);
 
-        // Double buffered.
         forcesBuffer = new ComputeBuffer(numParticles * 2, 4 * 4);
-        forcesBuffer.SetData(new Vector4[numParticles * 2]);
+        forcesBuffer.SetData(new Vector4[numParticles]);
 
         int groupArrLen = Mathf.CeilToInt(numHashes / 1024f);
         groupArrBuffer = new ComputeBuffer(groupArrLen, 4);
@@ -207,7 +243,7 @@ public class Solver : MonoBehaviour
             renderMat.SetColor("primaryColor", primaryColor.linear);
             renderMat.SetColor("secondaryColor", secondaryColor.linear);
 
-            solverShader.SetInt("frameNumber", solverFrame++);
+            double solverStart = Time.realtimeSinceStartupAsDouble;
 
             solverShader.Dispatch(solverShader.FindKernel("ResetCounter"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
             solverShader.Dispatch(solverShader.FindKernel("InsertToBucket"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
@@ -245,6 +281,14 @@ public class Solver : MonoBehaviour
                 solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
             }
 
+            if (solverFrame > 1) {
+                totalFrameTime += Time.realtimeSinceStartupAsDouble - lastFrameTimestamp;
+            }
+            lastFrameTimestamp = Time.realtimeSinceStartupAsDouble;
+
+            if (solverFrame == 400 || solverFrame == 1200) {
+                Debug.Log($"Avg frame time at #{solverFrame}: {totalFrameTime / (solverFrame-1) * 1000}ms.");
+            }
         }
 
         Graphics.DrawMeshInstancedIndirect(

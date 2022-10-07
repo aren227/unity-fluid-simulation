@@ -42,8 +42,7 @@ float viscosity;
 float gravity;
 float deltaTime;
 
-float3 minBounds;
-float3 maxBounds;
+float4 planes[7];
 
 float poly6Coeff;
 float spikyCoeff;
@@ -57,9 +56,7 @@ float3 moveVel;
 RWStructuredBuffer<Particle> particles;
 RWStructuredBuffer<Particle> sorted;
 
-// Double buffered for leapfrog integration.
 RWStructuredBuffer<float4> forces;
-uint frameNumber;
 
 #define PREFIX_SUM_ARRAY_NAME globalHashCounter
 
@@ -185,7 +182,6 @@ void MoveParticles (uint3 id : SV_DispatchThreadID)
             particles[idx].vel.xyz = moveVel;
 
             forces[idx] = 0;
-            forces[idx + numParticles] = 0;
         }
     }
 }
@@ -291,6 +287,33 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
     }
 }
 
+void checkPlane(float4 plane, inout Particle p) {
+    const float eps = 0.001;
+    const float damping = 0.5;
+
+
+    float3 planePoint;
+    if (plane.x != 0)       planePoint = float3(-plane.w / plane.x, 0, 0);
+    else if (plane.y != 0)  planePoint = float3(0, -plane.w / plane.y, 0);
+    else                    planePoint = float3(0, 0, -plane.w / plane.z);
+
+    float3 planeNormal = plane.xyz;
+
+    float3 pointToParticle = p.pos.xyz - planePoint;
+
+    float d = dot(planeNormal, pointToParticle);
+
+    if (d < 0) {
+        p.pos.xyz -= (d - eps) * planeNormal;
+
+        if (dot(p.vel.xyz, planeNormal) < 0) {
+            p.vel.xyz = reflect(p.vel.xyz, planeNormal);
+        }
+        // @Hack
+        p.vel.xyz *= lerp(1, damping.xxx, planeNormal);
+    }
+}
+
 [numthreads(1024,1,1)]
 void Step (uint3 id : SV_DispatchThreadID)
 {
@@ -301,32 +324,9 @@ void Step (uint3 id : SV_DispatchThreadID)
 
         pi.vel.xyz += currAcc * deltaTime;
 
-        const float eps = 0.001f;
-        const float damping = 0.5f;
-
-        if (pi.pos.x < minBounds.x) {
-            pi.pos.x = minBounds.x + eps;
-            pi.vel.x = abs(pi.vel.x) * damping;
-        }
-        if (pi.pos.y < minBounds.y) {
-            pi.pos.y = minBounds.y + eps;
-            pi.vel.y = abs(pi.vel.y) * damping;
-        }
-        if (pi.pos.z < minBounds.z) {
-            pi.pos.z = minBounds.z + eps;
-            pi.vel.z = abs(pi.vel.z) * damping;
-        }
-        if (pi.pos.x > maxBounds.x) {
-            pi.pos.x = maxBounds.x - eps;
-            pi.vel.x = -abs(pi.vel.x) * damping;
-        }
-        if (pi.pos.y > maxBounds.y) {
-            pi.pos.y = maxBounds.y - eps;
-            pi.vel.y = -abs(pi.vel.y) * damping;
-        }
-        if (pi.pos.z > maxBounds.z) {
-            pi.pos.z = maxBounds.z - eps;
-            pi.vel.z = -abs(pi.vel.z) * damping;
+        [unroll]
+        for (uint i = 0; i < 7; i++) {
+            if (dot(planes[i], 1) != 0) checkPlane(planes[i], pi);
         }
 
         pi.pos.xyz += pi.vel.xyz * deltaTime;
