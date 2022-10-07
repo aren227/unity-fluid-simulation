@@ -158,33 +158,24 @@ public class Solver : MonoBehaviour
         UpdateParams();
 
         hashesBuffer = new ComputeBuffer(numParticles, 4);
-        // @Todo: Do we really need these?
-        hashesBuffer.SetData(new uint[numParticles]);
 
         globalHashCounterBuffer = new ComputeBuffer(numHashes, 4);
-        globalHashCounterBuffer.SetData(new uint[numHashes]);
 
         localIndicesBuffer = new ComputeBuffer(numParticles, 4);
-        localIndicesBuffer.SetData(new uint[numParticles]);
 
         inverseIndicesBuffer = new ComputeBuffer(numParticles, 4);
-        inverseIndicesBuffer.SetData(new uint[numParticles]);
 
         particlesBuffer = new ComputeBuffer(numParticles, 4 * 8);
         particlesBuffer.SetData(particles);
 
         sortedBuffer = new ComputeBuffer(numParticles, 4 * 8);
-        sortedBuffer.SetData(new Particle[numParticles]);
 
         forcesBuffer = new ComputeBuffer(numParticles * 2, 4 * 4);
-        forcesBuffer.SetData(new Vector4[numParticles]);
 
         int groupArrLen = Mathf.CeilToInt(numHashes / 1024f);
         groupArrBuffer = new ComputeBuffer(groupArrLen, 4);
-        groupArrBuffer.SetData(new uint[groupArrLen]);
 
         hashDebugBuffer = new ComputeBuffer(3, 4);
-        hashDebugBuffer.SetData(new uint[3]);
 
         for (int i = 0; i < 11; i++) {
             solverShader.SetBuffer(i, "hashes", hashesBuffer);
