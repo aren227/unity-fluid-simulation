@@ -27,6 +27,7 @@ public class PrefixSumTest : MonoBehaviour
         }
 
         int[] result = new int[arr.Length];
+        int[] gpuResult = new int[arr.Length];
 
         double startTime;
 
@@ -49,13 +50,11 @@ public class PrefixSumTest : MonoBehaviour
         computeShader.Dispatch(1, 1, 1, 1);
         computeShader.Dispatch(2, 1024, 1, 1);
 
+        buffer.GetData(gpuResult);
+
         Debug.Log("GPU: " + Mathf.RoundToInt((float)((Time.realtimeSinceStartupAsDouble - startTime) * 1000)) + "ms.");
 
         // Compare results.
-        int[] gpuResult = new int[arr.Length];
-
-        buffer.GetData(gpuResult);
-
         bool pass = true;
         for (int i = 0; i < arr.Length; i++) {
             if (result[i] != gpuResult[i]) {
