@@ -30,6 +30,8 @@ Shader "Spheres"
 
             StructuredBuffer<float3> principle;
 
+            int usePositionSmoothing;
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -81,7 +83,7 @@ Shader "Spheres"
 
             v2f vert (appdata v, uint id : SV_InstanceID)
             {
-                float3 spherePos = particles[id].pos.xyz;
+                float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
                 // @Temp: Additional radius to make it larger.
                 float3 localPos = v.vertex.xyz * (radius * 2.5);
 
@@ -101,12 +103,7 @@ Shader "Spheres"
                     cov2.z, cov2.y, cov1.z
                 };
 
-                // ellip *= determinant(ellip);
                 ellip = inverse(ellip);
-
-                // ellip *= 5;
-
-                ellip /= 20;
 
                 float3 objectSpaceCamera = _WorldSpaceCameraPos.xyz - spherePos;
                 objectSpaceCamera = mul(ellip, objectSpaceCamera);
@@ -138,12 +135,6 @@ Shader "Spheres"
                 float3 hitPos = rayOrigin + rayDir * rayHit;
 
                 float3x3 mInv = float3x3(i.m1, i.m2, i.m3);
-
-                // float3 normal = float3(
-                //     dot(hitPos, mInv._11_21_31),
-                //     dot(hitPos, mInv._12_22_32),
-                //     dot(hitPos, mInv._13_23_33)
-                // );
 
                 // mInv^T * hitPos
                 float3 normal = normalize(mul(mInv, hitPos));

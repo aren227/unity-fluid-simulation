@@ -280,6 +280,7 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
 
         float4 m = float4(mean[id.x], 0);
         float3 cov1 = 0, cov2 = 0;
+        uint cnt = 0;
 
         BEGIN_FOREACH_PARTICLES
             if (d < radiusSqr) {
@@ -297,6 +298,7 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
                 cov1 += w * centered * centered;
                 cov2 += w * centered.xyz * centered.yzx;
                 m.w += w;
+                cnt++;
             }
 
         END_FOREACH_PARTICLES
@@ -311,7 +313,9 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
         cov1 /= m.w;
         cov2 /= m.w;
 
-        if (m.w > 1) {
+        // @Todo: Not enough condition.
+        // There are still matrices that determinant are almost-zero.
+        if (cnt >= 6) {
             float p1 = dot(cov2, cov2);
             float q = dot(cov1, float3(1,1,1)) / 3;
             float p2 = dot(cov1 - q, cov1 - q) + 2*p1;
@@ -345,16 +349,18 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
             // @Todo: Check if it's zero.
             // principle[id.x*4+0] = normalize(mul(A2, A3._11_21_31));
             // principle[id.x*4+1] = normalize(mul(A1, A3._11_21_31));
-            principle[id.x*4+0] = cov1;
-            principle[id.x*4+1] = cov2;
+            principle[id.x*4+0] = cov1 / eig.x;
+            principle[id.x*4+1] = cov2 / eig.x;
+            // principle[id.x*4+0] = 0;
+            // principle[id.x*4+1] = 0;
             principle[id.x*4+2] = normalize(mul(A1, A2._11_21_31));
-            principle[id.x*4+3] = eig;
+            principle[id.x*4+3] = m.xyz;
         }
         else {
             principle[id.x*4+0] = float3(1,1,1);
             principle[id.x*4+1] = 0;
             principle[id.x*4+2] = 0;
-            principle[id.x*4+3] = 0;
+            principle[id.x*4+3] = m.xyz;
         }
     }
 }

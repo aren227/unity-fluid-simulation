@@ -65,6 +65,9 @@ public class Solver : MonoBehaviour
         public Vector4 vel;
     }
 
+    private bool paused = false;
+    private bool usePositionSmoothing = true;
+
     Vector4 GetPlaneEq(Vector3 p, Vector3 n) {
         return new Vector4(n.x, n.y, n.z, -Vector3.Dot(p, n));
     }
@@ -239,8 +242,18 @@ public class Solver : MonoBehaviour
                 }
             }
 
+            if (Input.GetKeyDown(KeyCode.Space)) {
+                paused = !paused;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Z)) {
+                usePositionSmoothing = !usePositionSmoothing;
+                Debug.Log("usePositionSmoothing: " + usePositionSmoothing);
+            }
+
             renderMat.SetColor("primaryColor", primaryColor.linear);
             renderMat.SetColor("secondaryColor", secondaryColor.linear);
+            renderMat.SetInt("usePositionSmoothing", usePositionSmoothing ? 1 : 0);
 
             double solverStart = Time.realtimeSinceStartupAsDouble;
 
@@ -274,10 +287,12 @@ public class Solver : MonoBehaviour
             solverShader.Dispatch(solverShader.FindKernel("PrefixSum3"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
             solverShader.Dispatch(solverShader.FindKernel("Sort"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
 
-            for (int iter = 0; iter < 1; iter++) {
-                solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-                solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-                solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+            if (!paused) {
+                for (int iter = 0; iter < 1; iter++) {
+                    solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                    solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                    solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                }
             }
 
             if (solverFrame > 1) {
