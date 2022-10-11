@@ -86,7 +86,7 @@ MonoBehaviour:
     overrideState: 0
     value: 0
   postExposure:
-    overrideState: 1
+    overrideState: 0
     value: 0.4
   contrast:
     overrideState: 0

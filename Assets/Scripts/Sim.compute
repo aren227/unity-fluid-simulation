@@ -155,7 +155,7 @@ float visco(float l) {
 }
 
 float isotropic(float l) {
-    return 1 - pow(l / radius, 3);
+    return 1 - pow(l / radius, 6);
 }
 
 #define BEGIN_FOREACH_PARTICLES                                         \
@@ -362,20 +362,24 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
             float3x3 A3 = A;
             A3._11_22_33 -= eig.z;
 
+            // Normalize
+            A /= eig.x;
+
+            principle[id.x*4+0] = A._11_12_13;
+            principle[id.x*4+1] = A._21_22_23;
+            principle[id.x*4+2] = A._31_32_33;
+            principle[id.x*4+3] = m.xyz;
+
             // @Todo: Check if it's zero.
             // principle[id.x*4+0] = normalize(mul(A2, A3._11_21_31));
             // principle[id.x*4+1] = normalize(mul(A1, A3._11_21_31));
-            principle[id.x*4+0] = cov1 / eig.x;
-            principle[id.x*4+1] = cov2 / eig.x;
-            // principle[id.x*4+0] = 0;
-            // principle[id.x*4+1] = 0;
-            principle[id.x*4+2] = normalize(mul(A1, A2._11_21_31));
-            principle[id.x*4+3] = m.xyz;
+            // principle[id.x*4+2] = normalize(mul(A1, A2._11_21_31));
         }
         else {
-            principle[id.x*4+0] = float3(1,1,1);
-            principle[id.x*4+1] = 0;
-            principle[id.x*4+2] = 0;
+            const float dropletScale = 0.33;
+            principle[id.x*4+0] = float3(1,0,0)*dropletScale;
+            principle[id.x*4+1] = float3(0,1,0)*dropletScale;
+            principle[id.x*4+2] = float3(0,0,1)*dropletScale;
             principle[id.x*4+3] = m.xyz;
         }
     }

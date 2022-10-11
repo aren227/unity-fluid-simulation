@@ -382,12 +382,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   numParticles: 1048576
   initSize: 40
-  radius: 3
+  radius: 1
   gasConstant: 10
   restDensity: 1
   mass: 0.1
   density: 1
-  viscosity: 0.03
+  viscosity: 0.02
   gravity: 10
   deltaTime: 0.015
   minBounds: {x: -50, y: 0, z: -50}
@@ -396,6 +396,7 @@ MonoBehaviour:
   renderShader: {fileID: 4800000, guid: d422c3fc5e6461b4da80424ed4deb459, type: 3}
   particleMesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
   particleRenderSize: 0.5
+  sphereMesh: {fileID: 289301614986012343, guid: a9e33ff24a3d0a24eab2faa89cdf78f5, type: 3}
   primaryColor: {r: 0, g: 0.64705884, b: 0.92156863, a: 1}
   secondaryColor: {r: 0.043137256, g: 0.22745098, b: 0.50980395, a: 1}
   moveParticles: 10

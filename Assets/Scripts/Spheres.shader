@@ -40,7 +40,207 @@ Shader "Spheres"
             struct v2f
             {
                 float4 vertex : SV_POSITION;
-                float3 rayDir : TEXCOORD0;
+            };
+
+            // https://www.iquilezles.org/www/articles/spherefunctions/spherefunctions.htm
+            float sphIntersect( float3 ro, float3 rd, float4 sph )
+            {
+                float3 oc = ro - sph.xyz;
+                float b = dot( oc, rd );
+                float c = dot( oc, oc ) - sph.w*sph.w;
+                float h = b*b - c;
+                if( h<0.0 ) return -1.0;
+                h = sqrt( h );
+                return -b - h;
+            }
+
+            float invlerp(float a, float b, float t) {
+                return (t-a)/(b-a);
+            }
+
+            v2f vert (appdata v, uint id : SV_InstanceID)
+            {
+                float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
+                float3 localPos = v.vertex.xyz * (radius * 2 * 2);
+
+                float3x3 ellip = float3x3(principle[id*4+0], principle[id*4+1], principle[id*4+2]);
+
+                float3 worldPos = mul(ellip, localPos) + spherePos;
+
+                v2f o;
+                o.vertex = mul(UNITY_MATRIX_VP, float4(worldPos, 1));
+                return o;
+            }
+
+            fixed4 frag (v2f i) : SV_Target
+            {
+                return 0;
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            ZTest Always
+
+            CGPROGRAM
+            #pragma target 4.5
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            sampler2D depthBuffer;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            float4x4 inverseV, inverseP;
+
+            float radius;
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                o.vertex = v.vertex;
+                o.vertex.z = 0.5;
+                o.uv = v.uv;
+                return o;
+            }
+
+            float4 frag(v2f i, out float depth : SV_Depth) : SV_Target
+            {
+                float d = tex2D(depthBuffer, i.uv);
+
+                // Add small bias to take advantage of early-z-discard in the next pass.
+                // ??
+                depth = d-0.001;
+
+                // Calculate world-space position.
+                float3 viewSpaceRayDir = normalize(mul(inverseP, float4(i.uv*2-1, 0, 1)).xyz);
+                float viewSpaceDistance = LinearEyeDepth(d) / dot(viewSpaceRayDir, float3(0,0,-1));
+                // Slightly push forward to screen.
+                // viewSpaceDistance -= radius * 1;
+                // viewSpaceDistance -= 0.1;
+
+                float3 viewSpacePos = viewSpaceRayDir * viewSpaceDistance;
+                float3 worldSpacePos = mul(inverseV, float4(viewSpacePos, 1)).xyz;
+
+                return float4(worldSpacePos, 0);
+            }
+
+            ENDCG
+        }
+
+        Pass
+        {
+            ZTest Always
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma target 4.5
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            sampler2D worldPosBuffer;
+            sampler2D normalBuffer;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            float4x4 inverseV, inverseP;
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                o.vertex = v.vertex;
+                o.vertex.z = 0.5;
+                o.uv = v.uv;
+                return o;
+            }
+
+            float4 frag(v2f i) : SV_Target
+            {
+                float4 normal = tex2D(normalBuffer, i.uv);
+                float3 worldPos = tex2D(worldPosBuffer, i.uv);
+
+                // if (normal.w > 0) normal.xyz = normalize(normal.xyz);
+
+                float3 viewSpaceRayDir = normalize(mul(inverseP, float4(i.uv*2-1, 0, 1)).xyz);
+                float3 worldSpaceRayDir = normalize(mul(inverseV, viewSpaceRayDir).xyz);
+
+                float density = normal.w;
+                float delta = dot(normal.xyz, worldSpaceRayDir);
+                // @Todo: Check this value.
+                const float threshold = 0.42;
+                float3 next = worldPos - worldSpaceRayDir * clamp((density - threshold) / delta, -10, 10);
+
+                return float4(next, 0);
+            }
+
+            ENDCG
+        }
+
+        Pass
+        {
+            ZTest Less
+            ZWrite Off
+            Blend One One
+
+            CGPROGRAM
+            #pragma target 4.5
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            struct Particle {
+                float4 pos;
+                float4 vel;
+            };
+
+            StructuredBuffer<Particle> particles;
+
+            float radius;
+
+            fixed4 primaryColor;
+            fixed4 secondaryColor;
+
+            StructuredBuffer<float3> principle;
+
+            int usePositionSmoothing;
+
+            sampler2D worldPosBuffer;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+            };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float4 rayDir : TEXCOORD0;
                 float3 rayOrigin: TEXCOORD1;
                 float4 spherePos : TEXCOORD2;
                 float3 vel : TEXCOORD3;
@@ -85,7 +285,7 @@ Shader "Spheres"
             {
                 float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
                 // @Temp: Additional radius to make it larger.
-                float3 localPos = v.vertex.xyz * (radius * 2.5);
+                float3 localPos = v.vertex.xyz * (radius * 2 * 5);
 
                 float3 forward = normalize(_WorldSpaceCameraPos.xyz - spherePos);
                 float3 right = normalize(cross(forward, float3(0, 1, 0)));
@@ -94,15 +294,7 @@ Shader "Spheres"
                 float3x3 rotMat = float3x3(right, up, forward);
                 float3 worldPos = mul(localPos, rotMat) + spherePos;
 
-                float3 cov1 = principle[id*4+0];
-                float3 cov2 = principle[id*4+1];
-
-                float3x3 ellip = {
-                    cov1.x, cov2.x, cov2.z,
-                    cov2.x, cov1.y, cov2.y,
-                    cov2.z, cov2.y, cov1.z
-                };
-
+                float3x3 ellip = float3x3(principle[id*4+0], principle[id*4+1], principle[id*4+2]);
                 ellip = inverse(ellip);
 
                 float3 objectSpaceCamera = _WorldSpaceCameraPos.xyz - spherePos;
@@ -114,7 +306,9 @@ Shader "Spheres"
 
                 v2f o;
                 o.vertex = mul(UNITY_MATRIX_VP, float4(worldPos, 1));
-                o.rayDir = objectSpaceDir;
+
+                // @Temp: Actually it's screen-space uv.
+                o.rayDir = ComputeScreenPos(o.vertex);
                 o.rayOrigin = objectSpaceCamera;
                 o.spherePos = float4(spherePos, particles[id].pos.w); // Add density values.
                 o.vel = particles[id].vel.xyz;
@@ -125,40 +319,87 @@ Shader "Spheres"
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            float4 frag (v2f i) : SV_Target
             {
-                float3 rayOrigin = i.rayOrigin;
-                float3 rayDir = normalize(i.rayDir);
-                float rayHit = sphIntersect(rayOrigin, rayDir, float4(0,0,0, radius));
-                clip(rayHit);
-
-                float3 hitPos = rayOrigin + rayDir * rayHit;
-
                 float3x3 mInv = float3x3(i.m1, i.m2, i.m3);
 
+                float2 uv = i.rayDir.xy / i.rayDir.w;
+                float3 worldPos = tex2D(worldPosBuffer, uv).xyz;
+                float3 ellipPos = mul(mInv, worldPos - i.spherePos.xyz);
+
+                float distSqr = dot(ellipPos, ellipPos);
+                // @Todo: Maybe we need to give more radius.
+                float radiusSqr = pow(radius*6, 2);
+                if (distSqr >= radiusSqr) discard;
+
+                float density = pow(1 - distSqr / radiusSqr, 3);
+
                 // mInv^T * hitPos
-                float3 normal = normalize(mul(mInv, hitPos));
+                float3 normal = normalize(mul(transpose(mInv), ellipPos));
+
+                float3 centered = worldPos - i.spherePos.xyz;
+                normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
+
+                float3x3 wtf = inverse(mInv);
+                // normal = mul(wtf, normal);
+
+                normal = mul(transpose(mInv), normal);
+
+                return float4(normal.xyz, density);
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma target 4.5
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            sampler2D depthBuffer;
+            sampler2D normalBuffer;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                o.vertex = v.vertex;
+                o.vertex.z = 0.5;
+                o.uv = v.uv;
+                return o;
+            }
+
+            float4 frag(v2f i, out float depth : SV_Depth) : SV_Target
+            {
+                float d = tex2D(depthBuffer, i.uv);
+                float4 normal = tex2D(normalBuffer, i.uv);
+
+                if (d == 0) discard;
+
+                if (normal.w > 0) normal.xyz = -normalize(normal.xyz);
+
+                depth = d;
 
                 float light = max(dot(normal, _WorldSpaceLightPos0.xyz), 0);
-                light = lerp(0.3, 1, light);
+                light = lerp(0.1, 1, light);
 
-                float density = saturate(invlerp(0, 1, i.spherePos.w));
-
-
-                // float3 col = 0;
-                // if (density < 0.5) {
-                //     col = lerp(float3(0,0,1), float3(0,1,0), density*2);
-                // }
-                // else {
-                //     col = lerp(float3(0,1,0), float3(1,0,0), (density-0.5)*2);
-                // }
-
-                float3 col = lerp(primaryColor, secondaryColor, density);
-
-                col = lerp(col, float3(1,1,1), saturate(invlerp(10, 30, length(i.vel))));
-
-                return fixed4(col * light, 1);
+                return light;
             }
+
             ENDCG
         }
     }

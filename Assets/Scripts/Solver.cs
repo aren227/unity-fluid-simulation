@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class Solver : MonoBehaviour
 {
@@ -28,6 +29,8 @@ public class Solver : MonoBehaviour
     public Mesh particleMesh;
     public float particleRenderSize = 0.5f;
 
+    public Mesh sphereMesh;
+
     public Color primaryColor;
     public Color secondaryColor;
 
@@ -44,7 +47,8 @@ public class Solver : MonoBehaviour
     private ComputeBuffer meanBuffer;
     private ComputeBuffer principleBuffer;
 
-    private ComputeBuffer drawInstancedArgsBuffer;
+    private ComputeBuffer quadInstancedArgsBuffer;
+    private ComputeBuffer sphereInstancedArgsBuffer;
 
     private int solverFrame = 0;
 
@@ -66,8 +70,11 @@ public class Solver : MonoBehaviour
         public Vector4 vel;
     }
 
-    private bool paused = false;
+    private bool paused = true;
     private bool usePositionSmoothing = true;
+
+    private CommandBuffer commandBuffer;
+    private Mesh screenQuadMesh;
 
     Vector4 GetPlaneEq(Vector3 p, Vector3 n) {
         return new Vector4(n.x, n.y, n.z, -Vector3.Dot(p, n));
@@ -103,10 +110,10 @@ public class Solver : MonoBehaviour
 
         wavePlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
         wavePlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
-        wavePlanes[2] = GetPlaneEq(new Vector3(-50 + Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f, 0, 0), Vector3.right);
-        wavePlanes[3] = GetPlaneEq(new Vector3(50 - Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f, 0, 0), Vector3.left);
-        wavePlanes[4] = GetPlaneEq(new Vector3(0, 0, -50 + Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f), Vector3.forward);
-        wavePlanes[5] = GetPlaneEq(new Vector3(0, 0, 50 - Mathf.Pow(Mathf.Sin(Mathf.Min(waveTime*0.25f, Mathf.PI*0.5f)),2) * 32f), Vector3.back);
+        wavePlanes[2] = GetPlaneEq(new Vector3(-50 + Mathf.Pow(Mathf.Sin(waveTime*0.1f),2) * 20f, 0, 0), Vector3.right);
+        wavePlanes[3] = GetPlaneEq(new Vector3(50, 0, 0), Vector3.left);
+        wavePlanes[4] = GetPlaneEq(new Vector3(0, 0, -50), Vector3.forward);
+        wavePlanes[5] = GetPlaneEq(new Vector3(0, 0, 50), Vector3.back);
 
         groundPlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
         groundPlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
@@ -207,7 +214,7 @@ public class Solver : MonoBehaviour
         renderMat.SetBuffer("principle", principleBuffer);
         renderMat.SetFloat("radius", particleRenderSize * 0.5f);
 
-        drawInstancedArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
+        quadInstancedArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
 
         uint[] args = new uint[5];
         args[0] = particleMesh.GetIndexCount(0);
@@ -216,7 +223,40 @@ public class Solver : MonoBehaviour
         args[3] = particleMesh.GetBaseVertex(0);
         args[4] = 0;
 
-        drawInstancedArgsBuffer.SetData(args);
+        quadInstancedArgsBuffer.SetData(args);
+
+        sphereInstancedArgsBuffer = new ComputeBuffer(1, sizeof(uint) * 5, ComputeBufferType.IndirectArguments);
+
+        uint[] args2 = new uint[5];
+        args2[0] = sphereMesh.GetIndexCount(0);
+        args2[1] = (uint) numParticles;
+        args2[2] = sphereMesh.GetIndexStart(0);
+        args2[3] = sphereMesh.GetBaseVertex(0);
+        args2[4] = 0;
+
+        sphereInstancedArgsBuffer.SetData(args2);
+
+        screenQuadMesh = new Mesh();
+        screenQuadMesh.vertices = new Vector3[4] {
+            new Vector3( 1.0f , 1.0f,  0.0f),
+            new Vector3(-1.0f , 1.0f,  0.0f),
+            new Vector3(-1.0f ,-1.0f,  0.0f),
+            new Vector3( 1.0f ,-1.0f,  0.0f),
+        };
+        screenQuadMesh.uv = new Vector2[4] {
+            new Vector2(1, 0),
+            new Vector2(0, 0),
+            new Vector2(0, 1),
+            new Vector2(1, 1)
+        };
+        screenQuadMesh.triangles = new int[6] { 0, 1, 2, 2, 3, 0 };
+
+        commandBuffer = new CommandBuffer();
+        commandBuffer.name = "Fluid Render";
+
+        UpdateCommandBuffer();
+        Camera.main.AddCommandBuffer(CameraEvent.AfterForwardAlpha, commandBuffer);
+
     }
 
     void Update() {
@@ -325,25 +365,129 @@ public class Solver : MonoBehaviour
                     solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
                     solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
                 }
+
+                solverFrame++;
+
+                if (solverFrame > 1) {
+                    totalFrameTime += Time.realtimeSinceStartupAsDouble - lastFrameTimestamp;
+                }
+
+                if (solverFrame == 400 || solverFrame == 1200) {
+                    Debug.Log($"Avg frame time at #{solverFrame}: {totalFrameTime / (solverFrame-1) * 1000}ms.");
+                }
             }
 
-            if (solverFrame > 1) {
-                totalFrameTime += Time.realtimeSinceStartupAsDouble - lastFrameTimestamp;
-            }
             lastFrameTimestamp = Time.realtimeSinceStartupAsDouble;
+        }
+    }
 
-            if (solverFrame == 400 || solverFrame == 1200) {
-                Debug.Log($"Avg frame time at #{solverFrame}: {totalFrameTime / (solverFrame-1) * 1000}ms.");
-            }
+    void UpdateCommandBuffer() {
+        commandBuffer.Clear();
+
+        int[] worldPosBufferIds = new int[] {
+            Shader.PropertyToID("worldPosBuffer1"),
+            Shader.PropertyToID("worldPosBuffer2")
+        };
+
+        commandBuffer.GetTemporaryRT(worldPosBufferIds[0], Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBFloat);
+        commandBuffer.GetTemporaryRT(worldPosBufferIds[1], Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBFloat);
+
+        int depthId = Shader.PropertyToID("depthBuffer");
+        commandBuffer.GetTemporaryRT(depthId, Screen.width, Screen.height, 32, FilterMode.Point, RenderTextureFormat.Depth);
+
+        commandBuffer.SetRenderTarget((RenderTargetIdentifier)worldPosBufferIds[0], (RenderTargetIdentifier)depthId);
+        commandBuffer.ClearRenderTarget(true, true, Color.clear);
+
+        commandBuffer.DrawMeshInstancedIndirect(
+            sphereMesh,
+            0,  // submeshIndex
+            renderMat,
+            0,  // shaderPass
+            sphereInstancedArgsBuffer
+        );
+
+        int depth2Id = Shader.PropertyToID("depth2Buffer");
+        commandBuffer.GetTemporaryRT(depth2Id, Screen.width, Screen.height, 32, FilterMode.Point, RenderTextureFormat.Depth);
+
+        commandBuffer.SetRenderTarget((RenderTargetIdentifier)worldPosBufferIds[0], (RenderTargetIdentifier)depth2Id);
+        commandBuffer.ClearRenderTarget(true, true, Color.clear);
+
+        commandBuffer.SetGlobalTexture("depthBuffer", depthId);
+
+        commandBuffer.DrawMesh(
+            screenQuadMesh,
+            Matrix4x4.identity,
+            renderMat,
+            0, // submeshIndex
+            1  // shaderPass
+        );
+
+        int normalBufferId = Shader.PropertyToID("normalBuffer");
+        commandBuffer.GetTemporaryRT(normalBufferId, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBFloat);
+
+        commandBuffer.SetRenderTarget((RenderTargetIdentifier)normalBufferId, (RenderTargetIdentifier)depth2Id);
+        commandBuffer.ClearRenderTarget(false, true, Color.clear);
+
+        commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[0]);
+
+        commandBuffer.DrawMeshInstancedIndirect(
+            particleMesh,
+            0,  // submeshIndex
+            renderMat,
+            3,  // shaderPass
+            quadInstancedArgsBuffer
+        );
+
+        commandBuffer.SetGlobalTexture("normalBuffer", normalBufferId);
+
+        int nextBuffer = 1;
+        for (int iter = 0; iter < 0; iter++) {
+            // Update world pos.
+            commandBuffer.SetRenderTarget((RenderTargetIdentifier)worldPosBufferIds[nextBuffer], (RenderTargetIdentifier)depth2Id);
+
+            commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[nextBuffer^1]);
+
+            commandBuffer.DrawMesh(
+                screenQuadMesh,
+                Matrix4x4.identity,
+                renderMat,
+                0, // submeshIndex
+                2  // shaderPass
+            );
+
+            // Recalculate normals.
+            commandBuffer.SetRenderTarget((RenderTargetIdentifier)normalBufferId, (RenderTargetIdentifier)depth2Id);
+            commandBuffer.ClearRenderTarget(false, true, Color.clear);
+
+            commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[nextBuffer]);
+
+            commandBuffer.DrawMeshInstancedIndirect(
+                particleMesh,
+                0,  // submeshIndex
+                renderMat,
+                3,  // shaderPass
+                quadInstancedArgsBuffer
+            );
+
+            nextBuffer ^= 1;
         }
 
-        Graphics.DrawMeshInstancedIndirect(
-            particleMesh,
-            0,
+        commandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+
+        commandBuffer.DrawMesh(
+            screenQuadMesh,
+            Matrix4x4.identity,
             renderMat,
-            new Bounds(Vector3.zero, Vector3.one * 1000),
-            drawInstancedArgsBuffer
+            0, // submeshIndex
+            4  // shaderPass
         );
+    }
+
+    void LateUpdate() {
+        Matrix4x4 view = Camera.main.worldToCameraMatrix;
+
+        Shader.SetGlobalMatrix("inverseV", view.inverse);
+        Shader.SetGlobalMatrix("inverseP", Camera.main.projectionMatrix.inverse);
     }
 
     void OnDisable() {
@@ -359,6 +503,6 @@ public class Solver : MonoBehaviour
         meanBuffer.Dispose();
         principleBuffer.Dispose();
 
-        drawInstancedArgsBuffer.Dispose();
+        quadInstancedArgsBuffer.Dispose();
     }
 }
