@@ -66,6 +66,7 @@ RWStructuredBuffer<float3> principle;
 #include "PrefixSum.cginc"
 
 RWStructuredBuffer<uint> hashDebug;
+RWStructuredBuffer<int3> hashValueDebug;
 
 uint3 murmur_32_scramble(uint3 k) {
     k *= 0xcc9e2d51;
@@ -159,19 +160,17 @@ float isotropic(float l) {
 
 #define BEGIN_FOREACH_PARTICLES                                         \
 int3 base = floor(GRIDS_PER_DIAMETER/2.0 * (pi.pos.xyz / radius - 1));  \
-for (int dx = 0; dx < GRIDS_PER_DIAMETER+1; dx++) {                     \
-    for (int dy = 0; dy < GRIDS_PER_DIAMETER+1; dy++) {                 \
-        for (int dz = 0; dz < GRIDS_PER_DIAMETER+1; dz++) {             \
-            uint h = calculateHash(base + int3(dx, dy, dz));            \
-            uint begin = h > 0 ? globalHashCounter[h-1] : 0;            \
-            uint end = globalHashCounter[h];                            \
-            for (uint i = begin; i < end; i++) {                        \
-                Particle pj = sorted[i];                                \
-                float3 diff = pi.pos.xyz - pj.pos.xyz;                  \
-                float d = dot(diff, diff);                              \
+for (uint dxyz = 0; dxyz < (GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1); dxyz++) {   \
+    uint h = calculateHash(base + int3(dxyz / ((GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)) % (GRIDS_PER_DIAMETER+1), dxyz / (GRIDS_PER_DIAMETER+1) % (GRIDS_PER_DIAMETER+1), dxyz % (GRIDS_PER_DIAMETER+1)));            \
+    uint begin = h > 0 ? globalHashCounter[h-1] : 0;            \
+    uint end = globalHashCounter[h];                            \
+    for (uint i = begin; i < end; i++) {                        \
+        Particle pj = sorted[i];                                \
+        float3 diff = pi.pos.xyz - pj.pos.xyz;                  \
+        float d = dot(diff, diff);                              \
 
 
-#define END_FOREACH_PARTICLES   }}}}
+#define END_FOREACH_PARTICLES   }}
 
 [numthreads(1024,1,1)]
 void MoveParticles (uint3 id : SV_DispatchThreadID)
@@ -223,6 +222,23 @@ void DebugHash (uint3 id : SV_DispatchThreadID)
             InterlockedAdd(hashDebug[0], 1);
             InterlockedMax(hashDebug[1], globalHashCounter[id.x]);
         }
+    }
+    if (id.x < numParticles) {
+        Particle pi = sorted[id.x];
+
+        uint totalAccessCount = 0;
+        uint neighborCount = 0;
+
+        BEGIN_FOREACH_PARTICLES
+            totalAccessCount++;
+            if (d < radiusSqr) neighborCount++;
+        END_FOREACH_PARTICLES
+
+        InterlockedAdd(hashDebug[2], totalAccessCount);
+        InterlockedAdd(hashDebug[3], neighborCount);
+
+        int3 normed = floor(GRIDS_PER_DIAMETER/2.0 * (particles[id.x].pos.xyz / radius));
+        hashValueDebug[id.x] = normed;
     }
 }
 
@@ -329,7 +345,7 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
             float3x3 B = A;
             B._11_22_33 -= q;
             B /= p;
-            float3 r = determinant(B) / 2;
+            float r = determinant(B) / 2;
             float phi = acos(clamp(r, -1, 1)) / 3;
 
             float3 eig;

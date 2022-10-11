@@ -382,7 +382,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   numParticles: 1048576
   initSize: 40
-  radius: 0.65
+  radius: 3
   gasConstant: 10
   restDensity: 1
   mass: 0.1

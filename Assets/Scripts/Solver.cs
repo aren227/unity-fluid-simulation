@@ -40,6 +40,7 @@ public class Solver : MonoBehaviour
     private ComputeBuffer forcesBuffer;
     private ComputeBuffer groupArrBuffer;
     private ComputeBuffer hashDebugBuffer;
+    private ComputeBuffer hashValueDebugBuffer;
     private ComputeBuffer meanBuffer;
     private ComputeBuffer principleBuffer;
 
@@ -180,7 +181,8 @@ public class Solver : MonoBehaviour
         int groupArrLen = Mathf.CeilToInt(numHashes / 1024f);
         groupArrBuffer = new ComputeBuffer(groupArrLen, 4);
 
-        hashDebugBuffer = new ComputeBuffer(3, 4);
+        hashDebugBuffer = new ComputeBuffer(4, 4);
+        hashValueDebugBuffer = new ComputeBuffer(numParticles, 4 * 3);
 
         meanBuffer = new ComputeBuffer(numParticles, 4 * 3);
         principleBuffer = new ComputeBuffer(numParticles * 4, 4 * 3);
@@ -197,6 +199,7 @@ public class Solver : MonoBehaviour
             solverShader.SetBuffer(i, "hashDebug", hashDebugBuffer);
             solverShader.SetBuffer(i, "mean", meanBuffer);
             solverShader.SetBuffer(i, "principle", principleBuffer);
+            solverShader.SetBuffer(i, "hashValueDebug", hashValueDebugBuffer);
         }
 
         renderMat = new Material(renderShader);
@@ -262,7 +265,7 @@ public class Solver : MonoBehaviour
 
             // Debug
             if (Input.GetKeyDown(KeyCode.C)) {
-                uint[] debugResult = new uint[3];
+                uint[] debugResult = new uint[4];
 
                 hashDebugBuffer.SetData(debugResult);
 
@@ -286,6 +289,35 @@ public class Solver : MonoBehaviour
 
             solverShader.Dispatch(solverShader.FindKernel("PrefixSum3"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
             solverShader.Dispatch(solverShader.FindKernel("Sort"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+
+            // Debug
+            if (Input.GetKeyDown(KeyCode.C)) {
+                uint[] debugResult = new uint[4];
+
+                int[] values = new int[numParticles * 3];
+
+                hashDebugBuffer.SetData(debugResult);
+
+                solverShader.Dispatch(solverShader.FindKernel("DebugHash"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
+
+                hashDebugBuffer.GetData(debugResult);
+
+                uint totalAccessCount = debugResult[2];
+                uint totalNeighborCount = debugResult[3];
+
+                Debug.Log($"Total access: {totalAccessCount}, Avg access: {(float)totalAccessCount / numParticles}, Avg accept: {(float)totalNeighborCount / numParticles}");
+                Debug.Log($"Average accept rate: {(float)totalNeighborCount / totalAccessCount * 100}%");
+
+                hashValueDebugBuffer.GetData(values);
+
+                HashSet<Vector3Int> set = new HashSet<Vector3Int>();
+                for (int i = 0; i < numParticles; i++) {
+                    Vector3Int vi = new Vector3Int(values[i*3+0], values[i*3+1], values[i*3+2]);
+                    set.Add(vi);
+                }
+
+                Debug.Log($"Total unique hash keys: {set.Count}, Ideal bucket load: {(float)set.Count / numHashes * 100}%");
+            }
 
             if (!paused) {
                 for (int iter = 0; iter < 1; iter++) {
