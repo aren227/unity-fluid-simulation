@@ -45,6 +45,7 @@ public class Solver : MonoBehaviour
     private ComputeBuffer hashDebugBuffer;
     private ComputeBuffer hashValueDebugBuffer;
     private ComputeBuffer meanBuffer;
+    private ComputeBuffer covBuffer;
     private ComputeBuffer principleBuffer;
 
     private ComputeBuffer quadInstancedArgsBuffer;
@@ -166,7 +167,7 @@ public class Solver : MonoBehaviour
 
         solverShader.SetFloat("poly6Coeff", poly6);
         solverShader.SetFloat("spikyCoeff", spiky);
-        solverShader.SetFloat("viscoCoeff", visco);
+        solverShader.SetFloat("viscoCoeff", visco * viscosity);
 
         UpdateParams();
 
@@ -191,10 +192,11 @@ public class Solver : MonoBehaviour
         hashDebugBuffer = new ComputeBuffer(4, 4);
         hashValueDebugBuffer = new ComputeBuffer(numParticles, 4 * 3);
 
-        meanBuffer = new ComputeBuffer(numParticles, 4 * 3);
+        meanBuffer = new ComputeBuffer(numParticles, 4 * 4);
+        covBuffer = new ComputeBuffer(numParticles, 4 * 3 * 2);
         principleBuffer = new ComputeBuffer(numParticles * 4, 4 * 3);
 
-        for (int i = 0; i < 11; i++) {
+        for (int i = 0; i < 12; i++) {
             solverShader.SetBuffer(i, "hashes", hashesBuffer);
             solverShader.SetBuffer(i, "globalHashCounter", globalHashCounterBuffer);
             solverShader.SetBuffer(i, "localIndices", localIndicesBuffer);
@@ -205,6 +207,7 @@ public class Solver : MonoBehaviour
             solverShader.SetBuffer(i, "groupArr", groupArrBuffer);
             solverShader.SetBuffer(i, "hashDebug", hashDebugBuffer);
             solverShader.SetBuffer(i, "mean", meanBuffer);
+            solverShader.SetBuffer(i, "cov", covBuffer);
             solverShader.SetBuffer(i, "principle", principleBuffer);
             solverShader.SetBuffer(i, "hashValueDebug", hashValueDebugBuffer);
         }
@@ -361,8 +364,9 @@ public class Solver : MonoBehaviour
 
             if (!paused) {
                 for (int iter = 0; iter < 1; iter++) {
-                    solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
-                    solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+                    solverShader.Dispatch(solverShader.FindKernel("CalcPressure"), Mathf.CeilToInt((float)numParticles / 128), 1, 1);
+                    solverShader.Dispatch(solverShader.FindKernel("CalcForces"), Mathf.CeilToInt((float)numParticles / 128), 1, 1);
+                    solverShader.Dispatch(solverShader.FindKernel("CalcPCA"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
                     solverShader.Dispatch(solverShader.FindKernel("Step"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
                 }
 
@@ -501,6 +505,7 @@ public class Solver : MonoBehaviour
         groupArrBuffer.Dispose();
         hashDebugBuffer.Dispose();
         meanBuffer.Dispose();
+        covBuffer.Dispose();
         principleBuffer.Dispose();
 
         quadInstancedArgsBuffer.Dispose();
