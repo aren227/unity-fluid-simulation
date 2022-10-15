@@ -47,6 +47,7 @@ public class Solver : MonoBehaviour
     private ComputeBuffer meanBuffer;
     private ComputeBuffer covBuffer;
     private ComputeBuffer principleBuffer;
+    private ComputeBuffer hashRangeBuffer;
 
     private ComputeBuffer quadInstancedArgsBuffer;
     private ComputeBuffer sphereInstancedArgsBuffer;
@@ -195,8 +196,9 @@ public class Solver : MonoBehaviour
         meanBuffer = new ComputeBuffer(numParticles, 4 * 4);
         covBuffer = new ComputeBuffer(numParticles, 4 * 3 * 2);
         principleBuffer = new ComputeBuffer(numParticles * 4, 4 * 3);
+        hashRangeBuffer = new ComputeBuffer(numHashes, 4 * 2);
 
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 13; i++) {
             solverShader.SetBuffer(i, "hashes", hashesBuffer);
             solverShader.SetBuffer(i, "globalHashCounter", globalHashCounterBuffer);
             solverShader.SetBuffer(i, "localIndices", localIndicesBuffer);
@@ -209,6 +211,7 @@ public class Solver : MonoBehaviour
             solverShader.SetBuffer(i, "mean", meanBuffer);
             solverShader.SetBuffer(i, "cov", covBuffer);
             solverShader.SetBuffer(i, "principle", principleBuffer);
+            solverShader.SetBuffer(i, "hashRange", hashRangeBuffer);
             solverShader.SetBuffer(i, "hashValueDebug", hashValueDebugBuffer);
         }
 
@@ -332,6 +335,7 @@ public class Solver : MonoBehaviour
 
             solverShader.Dispatch(solverShader.FindKernel("PrefixSum3"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
             solverShader.Dispatch(solverShader.FindKernel("Sort"), Mathf.CeilToInt((float)numParticles / numThreads), 1, 1);
+            solverShader.Dispatch(solverShader.FindKernel("CalcHashRange"), Mathf.CeilToInt((float)numHashes / numThreads), 1, 1);
 
             // Debug
             if (Input.GetKeyDown(KeyCode.C)) {
@@ -507,6 +511,7 @@ public class Solver : MonoBehaviour
         meanBuffer.Dispose();
         covBuffer.Dispose();
         principleBuffer.Dispose();
+        hashRangeBuffer.Dispose();
 
         quadInstancedArgsBuffer.Dispose();
     }

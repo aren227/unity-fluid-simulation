@@ -6,6 +6,7 @@
 #pragma kernel PrefixSum2
 #pragma kernel PrefixSum3
 #pragma kernel Sort
+#pragma kernel CalcHashRange
 #pragma kernel CalcPressure
 #pragma kernel CalcForces
 #pragma kernel CalcPCA
@@ -62,6 +63,8 @@ RWStructuredBuffer<float4> forces;
 RWStructuredBuffer<float4> mean;
 RWStructuredBuffer<float3> cov;
 RWStructuredBuffer<float3> principle;
+
+RWStructuredBuffer<uint2> hashRange;
 
 #define PREFIX_SUM_ARRAY_NAME globalHashCounter
 
@@ -156,18 +159,17 @@ float visco(float l) {
     return viscoCoeff * (radius - l);
 }
 
-float isotropic(float l) {
-    return 1 - pow(l / radius, 6);
+float isotropic(float d) {
+    return 1 - pow(d / radiusSqr, 3);
 }
 
 #define BEGIN_FOREACH_PARTICLES                                         \
 int3 base = floor(GRIDS_PER_DIAMETER/2.0 * (pi.pos.xyz / radius - 1));  \
-for (uint dxyz = 0; dxyz < (GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1); dxyz++) {   \
-    uint h = calculateHash(base + int3(dxyz / ((GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)) % (GRIDS_PER_DIAMETER+1), dxyz / (GRIDS_PER_DIAMETER+1) % (GRIDS_PER_DIAMETER+1), dxyz % (GRIDS_PER_DIAMETER+1)));            \
-    uint begin = h > 0 ? globalHashCounter[h-1] : 0;            \
-    uint end = globalHashCounter[h];                            \
-    for (uint i = begin; i < end; i++) {                        \
-        Particle pj = sorted[i];                                \
+for (uint3 dxyz = 0; dxyz.x < (GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1); dxyz += uint3(1, (GRIDS_PER_DIAMETER+1), (GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1))) {   \
+    uint h = calculateHash(base + int3(dxyz / ((GRIDS_PER_DIAMETER+1)*(GRIDS_PER_DIAMETER+1)) % (GRIDS_PER_DIAMETER+1)));            \
+    uint2 range = hashRange[h];                                 \
+    for (; range.x < range.y; range.x++) {                      \
+        Particle pj = sorted[range.x];                                \
         float3 diff = pi.pos.xyz - pj.pos.xyz;                  \
         float d = dot(diff, diff);                              \
 
@@ -261,6 +263,16 @@ void Sort (uint3 id : SV_DispatchThreadID)
     }
 }
 
+[numthreads(1024,1,1)]
+void CalcHashRange (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < numHash) {
+        uint begin = id.x ? globalHashCounter[id.x-1] : 0;
+        uint end = globalHashCounter[id.x];
+        hashRange[id.x] = uint2(begin, end);
+    }
+}
+
 [numthreads(128,1,1)]
 void CalcPressure (uint3 id : SV_DispatchThreadID)
 {
@@ -272,9 +284,9 @@ void CalcPressure (uint3 id : SV_DispatchThreadID)
         float4 m = 0;
 
         BEGIN_FOREACH_PARTICLES
-            if (d < radiusSqr) {
+            [branch] if (d < radiusSqr) {
                 density += poly6(d);
-                m += isotropic(sqrt(d)) * float4(pj.pos.xyz, 1);
+                m += isotropic(d) * float4(pj.pos.xyz, 1);
             }
         END_FOREACH_PARTICLES
 
@@ -297,12 +309,12 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
 
         float3 force = 0;
 
-        float4 m = float4(mean[id.x].xyz, 0);
+        float4 m = mean[id.x];
         float3 cov1 = 0, cov2 = 0;
         uint cnt = 0;
 
         BEGIN_FOREACH_PARTICLES
-            if (d < radiusSqr) {
+            [branch] if (d < radiusSqr) {
                 float l = sqrt(d);
 
                 if (d > 0) {
@@ -312,11 +324,10 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
                     force += visco(l) / pj.pos.w * (pj.vel - pi.vel);
                 }
 
-                float w = isotropic(l);
+                float w = isotropic(d);
                 float3 centered = pj.pos.xyz - m.xyz;
                 cov1 += w * centered * centered;
                 cov2 += w * centered.xyz * centered.yzx;
-                m.w += w;
                 cnt++;
             }
 
