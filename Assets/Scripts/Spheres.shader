@@ -2,6 +2,9 @@ Shader "Spheres"
 {
     Properties
     {
+        _PrimaryColor ("Primary Color", Color) = (1,1,1,1)
+        _SecondaryColor ("Secondary Color", Color) = (1,1,1,1)
+        _FoamColor ("Foam Color", Color) = (1,1,1,1)
     }
     SubShader
     {
@@ -24,9 +27,6 @@ Shader "Spheres"
             StructuredBuffer<Particle> particles;
 
             float radius;
-
-            fixed4 primaryColor;
-            fixed4 secondaryColor;
 
             StructuredBuffer<float3> principle;
 
@@ -163,14 +163,13 @@ Shader "Spheres"
 
             float radius;
 
-            fixed4 primaryColor;
-            fixed4 secondaryColor;
-
             StructuredBuffer<float3> principle;
 
             int usePositionSmoothing;
 
             sampler2D worldPosBuffer;
+
+            float4 _PrimaryColor, _SecondaryColor, _FoamColor;
 
             struct appdata
             {
@@ -187,6 +186,12 @@ Shader "Spheres"
                 float3 m1 : TEXCOORD4;
                 float3 m2 : TEXCOORD5;
                 float3 m3 : TEXCOORD6;
+            };
+
+            struct normalAndColor
+            {
+                float4 normal : SV_Target0;
+                float4 color : SV_Target1;
             };
 
             // https://www.iquilezles.org/www/articles/spherefunctions/spherefunctions.htm
@@ -224,9 +229,9 @@ Shader "Spheres"
             v2f vert (appdata v, uint id : SV_InstanceID)
             {
                 float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
-                // @Temp: Additional radius to make it larger.
-                float3 localPos = v.vertex.xyz * (radius * 2 * 5);
+                float3 localPos = v.vertex.xyz * (radius * 2 * 3);
 
+                // @Todo: Implement ellipsoid fitted quad.
                 float3 forward = normalize(_WorldSpaceCameraPos.xyz - spherePos);
                 float3 right = normalize(cross(forward, float3(0, 1, 0)));
                 float3 up = normalize(cross(right, forward));
@@ -259,7 +264,7 @@ Shader "Spheres"
                 return o;
             }
 
-            float4 frag (v2f i) : SV_Target
+            normalAndColor frag (v2f i) : SV_Target
             {
                 float3x3 mInv = float3x3(i.m1, i.m2, i.m3);
 
@@ -272,13 +277,23 @@ Shader "Spheres"
                 float radiusSqr = pow(radius*6, 2);
                 if (distSqr >= radiusSqr) discard;
 
-                float density = pow(1 - distSqr / radiusSqr, 3);
+                float weight = pow(1 - distSqr / radiusSqr, 3);
 
                 float3 centered = worldPos - i.spherePos.xyz;
                 float3 normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
                 normal = mul(normal, mInv);
 
-                return float4(normal, density);
+                // @Hardcoded: Density range
+                float density = saturate(invlerp(0, 1, i.spherePos.w));
+                float3 color = lerp(_PrimaryColor, _SecondaryColor, density);
+                // @Hardcoded: Velocity range
+                color = lerp(color, _FoamColor, saturate(invlerp(10, 30, length(i.vel))));
+
+                normalAndColor o;
+                o.normal = float4(normal, weight);
+                o.color = float4(color, 1) * weight;
+
+                return o;
             }
             ENDCG
         }
@@ -294,6 +309,7 @@ Shader "Spheres"
 
             sampler2D depthBuffer;
             sampler2D normalBuffer;
+            sampler2D colorBuffer;
 
             struct appdata
             {
@@ -320,17 +336,21 @@ Shader "Spheres"
             {
                 float d = tex2D(depthBuffer, i.uv);
                 float4 normal = tex2D(normalBuffer, i.uv);
+                float4 color = tex2D(colorBuffer, i.uv);
 
                 if (d == 0) discard;
 
-                if (normal.w > 0) normal.xyz = -normalize(normal.xyz);
+                if (normal.w > 0) {
+                    normal.xyz = -normalize(normal.xyz);
+                    color /= color.w;
+                }
 
                 depth = d;
 
                 float light = max(dot(normal, _WorldSpaceLightPos0.xyz), 0);
                 light = lerp(0.1, 1, light);
 
-                return light;
+                return color * light;
             }
 
             ENDCG

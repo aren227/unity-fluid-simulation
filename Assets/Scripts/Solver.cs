@@ -24,7 +24,7 @@ public class Solver : MonoBehaviour
     public ComputeShader solverShader;
 
     public Shader renderShader;
-    private Material renderMat;
+    public Material renderMat;
 
     public Mesh particleMesh;
     public float particleRenderSize = 0.5f;
@@ -215,7 +215,6 @@ public class Solver : MonoBehaviour
             solverShader.SetBuffer(i, "hashValueDebug", hashValueDebugBuffer);
         }
 
-        renderMat = new Material(renderShader);
         renderMat.SetBuffer("particles", particlesBuffer);
         renderMat.SetBuffer("principle", principleBuffer);
         renderMat.SetFloat("radius", particleRenderSize * 0.5f);
@@ -433,7 +432,10 @@ public class Solver : MonoBehaviour
         int normalBufferId = Shader.PropertyToID("normalBuffer");
         commandBuffer.GetTemporaryRT(normalBufferId, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBFloat);
 
-        commandBuffer.SetRenderTarget((RenderTargetIdentifier)normalBufferId, (RenderTargetIdentifier)depth2Id);
+        int colorBufferId = Shader.PropertyToID("colorBuffer");
+        commandBuffer.GetTemporaryRT(colorBufferId, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBFloat);
+
+        commandBuffer.SetRenderTarget(new RenderTargetIdentifier[] { normalBufferId, colorBufferId }, (RenderTargetIdentifier)depth2Id);
         commandBuffer.ClearRenderTarget(false, true, Color.clear);
 
         commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[0]);
@@ -447,6 +449,7 @@ public class Solver : MonoBehaviour
         );
 
         commandBuffer.SetGlobalTexture("normalBuffer", normalBufferId);
+        commandBuffer.SetGlobalTexture("colorBuffer", colorBufferId);
 
         commandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
 
