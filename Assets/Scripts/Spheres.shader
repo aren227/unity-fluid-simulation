@@ -7,6 +7,7 @@ Shader "Spheres"
         _FoamColor ("Foam Color", Color) = (1,1,1,1)
         [HDR] _SpecularColor ("Specular Color", Color) = (1,1,1,1)
         _PhongExponent ("Phong Exponent", Float) = 128
+        _EnvMap ("Environment Map", Cube) = "white" {}
     }
     SubShader
     {
@@ -313,6 +314,7 @@ Shader "Spheres"
             sampler2D worldPosBuffer;
             sampler2D normalBuffer;
             sampler2D colorBuffer;
+            samplerCUBE _EnvMap;
 
             float4 _SpecularColor;
             float _PhongExponent;
@@ -363,6 +365,16 @@ Shader "Spheres"
 
                 // Specular highlight
                 color += pow(max(dot(normal, mid), 0), _PhongExponent) * _SpecularColor;
+
+                float4 reflectedColor = texCUBE(_EnvMap, reflect(-viewDir, normal));
+
+                // Schlick's approximation
+                float iorAir = 1.0;
+                float iorWater = 1.333;
+                float r0 = pow((iorAir - iorWater) / (iorAir + iorWater), 2);
+                float rTheta = r0 + (1 - r0) * pow(1 - max(dot(viewDir, normal), 0), 5);
+
+                color = lerp(color, reflectedColor, rTheta);
 
                 return color;
             }
