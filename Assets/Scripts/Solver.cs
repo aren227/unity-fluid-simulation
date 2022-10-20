@@ -442,43 +442,11 @@ public class Solver : MonoBehaviour
             particleMesh,
             0,  // submeshIndex
             renderMat,
-            3,  // shaderPass
+            2,  // shaderPass
             quadInstancedArgsBuffer
         );
 
         commandBuffer.SetGlobalTexture("normalBuffer", normalBufferId);
-
-        int nextBuffer = 1;
-        for (int iter = 0; iter < 0; iter++) {
-            // Update world pos.
-            commandBuffer.SetRenderTarget((RenderTargetIdentifier)worldPosBufferIds[nextBuffer], (RenderTargetIdentifier)depth2Id);
-
-            commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[nextBuffer^1]);
-
-            commandBuffer.DrawMesh(
-                screenQuadMesh,
-                Matrix4x4.identity,
-                renderMat,
-                0, // submeshIndex
-                2  // shaderPass
-            );
-
-            // Recalculate normals.
-            commandBuffer.SetRenderTarget((RenderTargetIdentifier)normalBufferId, (RenderTargetIdentifier)depth2Id);
-            commandBuffer.ClearRenderTarget(false, true, Color.clear);
-
-            commandBuffer.SetGlobalTexture("worldPosBuffer", worldPosBufferIds[nextBuffer]);
-
-            commandBuffer.DrawMeshInstancedIndirect(
-                particleMesh,
-                0,  // submeshIndex
-                renderMat,
-                3,  // shaderPass
-                quadInstancedArgsBuffer
-            );
-
-            nextBuffer ^= 1;
-        }
 
         commandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
 
@@ -487,7 +455,7 @@ public class Solver : MonoBehaviour
             Matrix4x4.identity,
             renderMat,
             0, // submeshIndex
-            4  // shaderPass
+            3  // shaderPass
         );
     }
 

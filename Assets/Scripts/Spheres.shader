@@ -143,66 +143,6 @@ Shader "Spheres"
 
         Pass
         {
-            ZTest Always
-            ZWrite Off
-
-            CGPROGRAM
-            #pragma target 4.5
-            #pragma vertex vert
-            #pragma fragment frag
-
-            #include "UnityCG.cginc"
-
-            sampler2D worldPosBuffer;
-            sampler2D normalBuffer;
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float4 vertex : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            float4x4 inverseV, inverseP;
-
-            v2f vert(appdata v)
-            {
-                v2f o;
-                o.vertex = v.vertex;
-                o.vertex.z = 0.5;
-                o.uv = v.uv;
-                return o;
-            }
-
-            float4 frag(v2f i) : SV_Target
-            {
-                float4 normal = tex2D(normalBuffer, i.uv);
-                float3 worldPos = tex2D(worldPosBuffer, i.uv);
-
-                // if (normal.w > 0) normal.xyz = normalize(normal.xyz);
-
-                float3 viewSpaceRayDir = normalize(mul(inverseP, float4(i.uv*2-1, 0, 1)).xyz);
-                float3 worldSpaceRayDir = normalize(mul(inverseV, viewSpaceRayDir).xyz);
-
-                float density = normal.w;
-                float delta = dot(normal.xyz, worldSpaceRayDir);
-                // @Todo: Check this value.
-                const float threshold = 0.42;
-                float3 next = worldPos - worldSpaceRayDir * clamp((density - threshold) / delta, -10, 10);
-
-                return float4(next, 0);
-            }
-
-            ENDCG
-        }
-
-        Pass
-        {
             ZTest Less
             ZWrite Off
             Blend One One
@@ -334,18 +274,11 @@ Shader "Spheres"
 
                 float density = pow(1 - distSqr / radiusSqr, 3);
 
-                // mInv^T * hitPos
-                float3 normal = normalize(mul(transpose(mInv), ellipPos));
-
                 float3 centered = worldPos - i.spherePos.xyz;
-                normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
+                float3 normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
+                normal = mul(normal, mInv);
 
-                float3x3 wtf = inverse(mInv);
-                // normal = mul(wtf, normal);
-
-                normal = mul(transpose(mInv), normal);
-
-                return float4(normal.xyz, density);
+                return float4(normal, density);
             }
             ENDCG
         }
