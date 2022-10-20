@@ -5,6 +5,8 @@ Shader "Spheres"
         _PrimaryColor ("Primary Color", Color) = (1,1,1,1)
         _SecondaryColor ("Secondary Color", Color) = (1,1,1,1)
         _FoamColor ("Foam Color", Color) = (1,1,1,1)
+        [HDR] _SpecularColor ("Specular Color", Color) = (1,1,1,1)
+        _PhongExponent ("Phong Exponent", Float) = 128
     }
     SubShader
     {
@@ -229,7 +231,7 @@ Shader "Spheres"
             v2f vert (appdata v, uint id : SV_InstanceID)
             {
                 float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
-                float3 localPos = v.vertex.xyz * (radius * 2 * 3);
+                float3 localPos = v.vertex.xyz * (radius * 2 * 4);
 
                 // @Todo: Implement ellipsoid fitted quad.
                 float3 forward = normalize(_WorldSpaceCameraPos.xyz - spherePos);
@@ -308,8 +310,12 @@ Shader "Spheres"
             #include "UnityCG.cginc"
 
             sampler2D depthBuffer;
+            sampler2D worldPosBuffer;
             sampler2D normalBuffer;
             sampler2D colorBuffer;
+
+            float4 _SpecularColor;
+            float _PhongExponent;
 
             struct appdata
             {
@@ -335,6 +341,7 @@ Shader "Spheres"
             float4 frag(v2f i, out float depth : SV_Depth) : SV_Target
             {
                 float d = tex2D(depthBuffer, i.uv);
+                float3 worldPos = tex2D(worldPosBuffer, i.uv).xyz;
                 float4 normal = tex2D(normalBuffer, i.uv);
                 float4 color = tex2D(colorBuffer, i.uv);
 
@@ -350,7 +357,14 @@ Shader "Spheres"
                 float light = max(dot(normal, _WorldSpaceLightPos0.xyz), 0);
                 light = lerp(0.1, 1, light);
 
-                return color * light;
+                float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - worldPos);
+                float3 lightDir = _WorldSpaceLightPos0.xyz;
+                float3 mid = normalize(viewDir + lightDir);
+
+                // Specular highlight
+                color += pow(max(dot(normal, mid), 0), _PhongExponent) * _SpecularColor;
+
+                return color;
             }
 
             ENDCG
