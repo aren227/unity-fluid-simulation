@@ -100,7 +100,7 @@ public class Solver : MonoBehaviour
         }
 
         if (currPlanes == wavePlanes) {
-            waveTime += Time.deltaTime;
+            waveTime += deltaTime;
         }
 
         boxPlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
@@ -112,7 +112,7 @@ public class Solver : MonoBehaviour
 
         wavePlanes[0] = GetPlaneEq(new Vector3(0, 0, 0), Vector3.up);
         wavePlanes[1] = GetPlaneEq(new Vector3(0, 100, 0), Vector3.down);
-        wavePlanes[2] = GetPlaneEq(new Vector3(-50 + Mathf.Pow(Mathf.Sin(waveTime*0.1f),2) * 20f, 0, 0), Vector3.right);
+        wavePlanes[2] = GetPlaneEq(new Vector3(-50 + Mathf.Pow(Mathf.Sin(waveTime*0.2f),8) * 25f, 0, 0), Vector3.right);
         wavePlanes[3] = GetPlaneEq(new Vector3(50, 0, 0), Vector3.left);
         wavePlanes[4] = GetPlaneEq(new Vector3(0, 0, -50), Vector3.forward);
         wavePlanes[5] = GetPlaneEq(new Vector3(0, 0, 50), Vector3.back);

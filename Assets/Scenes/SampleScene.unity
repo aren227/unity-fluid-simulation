@@ -389,7 +389,7 @@ MonoBehaviour:
   density: 1
   viscosity: 0.02
   gravity: 10
-  deltaTime: 0.015
+  deltaTime: 0.025
   minBounds: {x: -50, y: 0, z: -50}
   maxBounds: {x: 50, y: 100, z: 50}
   solverShader: {fileID: 7200000, guid: f4000e3305ec3b14b8f7b31781bb32dd, type: 3}
