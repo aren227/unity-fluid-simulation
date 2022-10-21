@@ -343,6 +343,9 @@ void CalcForces (uint3 id : SV_DispatchThreadID)
         cov1 /= m.w;
         cov2 /= m.w;
 
+        // Numerical stability.
+        cov1 = max(cov1, 0.0001);
+
         mean[id.x].w = cnt;
         cov[id.x*2+0] = cov1;
         cov[id.x*2+1] = cov2;
