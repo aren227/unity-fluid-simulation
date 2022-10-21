@@ -172,8 +172,6 @@ Shader "Spheres"
 
             sampler2D worldPosBuffer;
 
-            float4 _PrimaryColor, _SecondaryColor, _FoamColor;
-
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -185,16 +183,16 @@ Shader "Spheres"
                 float4 rayDir : TEXCOORD0;
                 float3 rayOrigin: TEXCOORD1;
                 float4 spherePos : TEXCOORD2;
-                float3 vel : TEXCOORD3;
+                float2 densitySpeed : TEXCOORD3;
                 float3 m1 : TEXCOORD4;
                 float3 m2 : TEXCOORD5;
                 float3 m3 : TEXCOORD6;
             };
 
-            struct normalAndColor
+            struct output2
             {
                 float4 normal : SV_Target0;
-                float4 color : SV_Target1;
+                float2 densitySpeed : SV_Target1;
             };
 
             // https://www.iquilezles.org/www/articles/spherefunctions/spherefunctions.htm
@@ -259,7 +257,9 @@ Shader "Spheres"
                 o.rayDir = ComputeScreenPos(o.vertex);
                 o.rayOrigin = objectSpaceCamera;
                 o.spherePos = float4(spherePos, particles[id].pos.w); // Add density values.
-                o.vel = particles[id].vel.xyz;
+
+                // @Hardcoded: Range
+                o.densitySpeed = saturate(float2(invlerp(0, 1, o.spherePos.w), invlerp(10, 30, length(particles[id].vel.xyz))));
 
                 o.m1 = ellip._11_12_13;
                 o.m2 = ellip._21_22_23;
@@ -267,7 +267,7 @@ Shader "Spheres"
                 return o;
             }
 
-            normalAndColor frag (v2f i) : SV_Target
+            output2 frag (v2f i) : SV_Target
             {
                 float3x3 mInv = float3x3(i.m1, i.m2, i.m3);
 
@@ -286,15 +286,9 @@ Shader "Spheres"
                 float3 normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
                 normal = mul(normal, mInv);
 
-                // @Hardcoded: Density range
-                float density = saturate(invlerp(0, 1, i.spherePos.w));
-                float3 color = lerp(_PrimaryColor, _SecondaryColor, density);
-                // @Hardcoded: Velocity range
-                color = lerp(color, _FoamColor, saturate(invlerp(10, 30, length(i.vel))));
-
-                normalAndColor o;
+                output2 o;
                 o.normal = float4(normal, weight);
-                o.color = float4(color, 1) * weight;
+                o.densitySpeed = float2(i.densitySpeed) * weight;
 
                 return o;
             }
@@ -316,6 +310,7 @@ Shader "Spheres"
             sampler2D colorBuffer;
             samplerCUBE _EnvMap;
 
+            float4 _PrimaryColor, _SecondaryColor, _FoamColor;
             float4 _SpecularColor;
             float _PhongExponent;
 
@@ -345,16 +340,19 @@ Shader "Spheres"
                 float d = tex2D(depthBuffer, i.uv);
                 float3 worldPos = tex2D(worldPosBuffer, i.uv).xyz;
                 float4 normal = tex2D(normalBuffer, i.uv);
-                float4 color = tex2D(colorBuffer, i.uv);
+                float2 densitySpeed = tex2D(colorBuffer, i.uv);
 
                 if (d == 0) discard;
 
                 if (normal.w > 0) {
                     normal.xyz = -normalize(normal.xyz);
-                    color /= color.w;
+                    densitySpeed /= normal.w;
                 }
 
                 depth = d;
+
+                float3 diffuse = lerp(_PrimaryColor, _SecondaryColor, densitySpeed.x);
+                diffuse = lerp(diffuse, _FoamColor, densitySpeed.y);
 
                 float light = max(dot(normal, _WorldSpaceLightPos0.xyz), 0);
                 light = lerp(0.1, 1, light);
@@ -364,7 +362,7 @@ Shader "Spheres"
                 float3 mid = normalize(viewDir + lightDir);
 
                 // Specular highlight
-                color += pow(max(dot(normal, mid), 0), _PhongExponent) * _SpecularColor;
+                diffuse += pow(max(dot(normal, mid), 0), _PhongExponent) * _SpecularColor;
 
                 float4 reflectedColor = texCUBE(_EnvMap, reflect(-viewDir, normal));
 
@@ -374,9 +372,9 @@ Shader "Spheres"
                 float r0 = pow((iorAir - iorWater) / (iorAir + iorWater), 2);
                 float rTheta = r0 + (1 - r0) * pow(1 - max(dot(viewDir, normal), 0), 5);
 
-                color = lerp(color, reflectedColor, rTheta);
+                diffuse = lerp(diffuse, reflectedColor, rTheta);
 
-                return color;
+                return float4(diffuse, 1);
             }
 
             ENDCG
