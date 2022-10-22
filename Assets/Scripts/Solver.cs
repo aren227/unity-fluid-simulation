@@ -72,7 +72,7 @@ public class Solver : MonoBehaviour
         public Vector4 vel;
     }
 
-    private bool paused = true;
+    private bool paused = false;
     private bool usePositionSmoothing = true;
 
     private CommandBuffer commandBuffer;
