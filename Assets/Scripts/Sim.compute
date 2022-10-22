@@ -414,7 +414,7 @@ void CalcPCA(uint3 id : SV_DispatchThreadID)
     }
 }
 
-void checkPlane(float4 plane, inout Particle p) {
+void checkPlane(float4 plane, inout float3 pos, inout float3 vel) {
     const float eps = 0.001;
     const float damping = 0.5;
 
@@ -426,15 +426,15 @@ void checkPlane(float4 plane, inout Particle p) {
 
     float3 planeNormal = plane.xyz;
 
-    float3 pointToParticle = p.pos.xyz - planePoint;
+    float3 pointToParticle = pos - planePoint;
 
     float d = dot(planeNormal, pointToParticle);
 
     if (d < 0) {
-        p.pos.xyz -= (d - eps) * planeNormal;
+        pos -= (d - eps) * planeNormal;
 
-        if (dot(p.vel.xyz, planeNormal) < 0) {
-            p.vel.xyz = reflect(p.vel.xyz, planeNormal);
+        if (dot(vel, planeNormal) < 0) {
+            vel -= dot(vel, planeNormal) * planeNormal;
         }
     }
 }
@@ -447,14 +447,14 @@ void Step (uint3 id : SV_DispatchThreadID)
 
         float3 currAcc = forces[id.x].xyz / mass;
 
+        [unroll]
+        for (uint i = 0; i < 7; i++) {
+            if (dot(planes[i], 1) != 0) checkPlane(planes[i], pi.pos.xyz, pi.vel.xyz);
+        }
+
         pi.vel.xyz += currAcc * deltaTime;
 
         pi.pos.xyz += pi.vel.xyz * deltaTime;
-
-        [unroll]
-        for (uint i = 0; i < 7; i++) {
-            if (dot(planes[i], 1) != 0) checkPlane(planes[i], pi);
-        }
 
         // particles[inverseIndices[id.x]] = pi;
         particles[id.x] = pi;
