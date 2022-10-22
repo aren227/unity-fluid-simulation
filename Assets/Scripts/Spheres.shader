@@ -232,15 +232,10 @@ Shader "Spheres"
                 float3 spherePos = usePositionSmoothing ? principle[id*4+3] : particles[id].pos.xyz;
                 float3 localPos = v.vertex.xyz * (radius * 2 * 4);
 
-                // @Todo: Implement ellipsoid fitted quad.
-                float3 forward = normalize(_WorldSpaceCameraPos.xyz - spherePos);
-                float3 right = normalize(cross(forward, float3(0, 1, 0)));
-                float3 up = normalize(cross(right, forward));
-
-                float3x3 rotMat = float3x3(right, up, forward);
-                float3 worldPos = mul(localPos, rotMat) + spherePos;
-
                 float3x3 ellip = float3x3(principle[id*4+0], principle[id*4+1], principle[id*4+2]);
+
+                float3 worldPos = mul(ellip, localPos) + spherePos;
+
                 ellip = inverse(ellip);
 
                 float3 objectSpaceCamera = _WorldSpaceCameraPos.xyz - spherePos;
@@ -276,8 +271,7 @@ Shader "Spheres"
                 float3 ellipPos = mul(mInv, worldPos - i.spherePos.xyz);
 
                 float distSqr = dot(ellipPos, ellipPos);
-                // @Todo: Maybe we need to give more radius.
-                float radiusSqr = pow(radius*6, 2);
+                float radiusSqr = pow(radius*4, 2);
                 if (distSqr >= radiusSqr) discard;
 
                 float weight = pow(1 - distSqr / radiusSqr, 3);

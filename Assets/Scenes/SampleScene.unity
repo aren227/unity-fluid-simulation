@@ -359,15 +359,15 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
-  m_LocalRotation: {x: 0.2626056, y: 0.0058942, z: -0.0016041818, w: 0.9648839}
-  m_LocalPosition: {x: -1.5766306, y: 62.906128, z: -90.443634}
+  m_LocalRotation: {x: 0.3420201, y: 0, z: 0, w: 0.9396927}
+  m_LocalPosition: {x: 0, y: 57.3, z: -73.2}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 439758682}
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 40, y: 0, z: 0}
 --- !u!114 &963194229
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -381,7 +381,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   numParticles: 1048576
-  initSize: 40
+  initSize: 37
   radius: 1
   gasConstant: 10
   restDensity: 1
@@ -395,9 +395,9 @@ MonoBehaviour:
   solverShader: {fileID: 7200000, guid: f4000e3305ec3b14b8f7b31781bb32dd, type: 3}
   renderShader: {fileID: 4800000, guid: d422c3fc5e6461b4da80424ed4deb459, type: 3}
   renderMat: {fileID: 2100000, guid: 6378f3d1b6e448e41ae0a514bce49add, type: 2}
-  particleMesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+  particleMesh: {fileID: -5495902117074765545, guid: 32591c72e19b392408b392f27e87e875, type: 3}
   particleRenderSize: 0.5
-  sphereMesh: {fileID: 289301614986012343, guid: a9e33ff24a3d0a24eab2faa89cdf78f5, type: 3}
+  sphereMesh: {fileID: 289301614986012343, guid: e4bf80ccc13306e4597dd4ace78528f5, type: 3}
   primaryColor: {r: 0, g: 0.64705884, b: 0.92156863, a: 1}
   secondaryColor: {r: 0.043137256, g: 0.22745098, b: 0.50980395, a: 1}
   moveParticles: 10
