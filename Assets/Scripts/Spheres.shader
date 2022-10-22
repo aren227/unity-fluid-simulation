@@ -124,9 +124,7 @@ Shader "Spheres"
             {
                 float d = tex2D(depthBuffer, i.uv);
 
-                // Add small bias to take advantage of early-z-discard in the next pass.
-                // ??
-                depth = d-0.001;
+                depth = d;
 
                 // Calculate world-space position.
                 float3 viewSpaceRayDir = normalize(mul(inverseP, float4(i.uv*2-1, 0, 1)).xyz);
