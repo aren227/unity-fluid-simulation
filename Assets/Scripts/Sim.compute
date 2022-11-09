@@ -395,15 +395,24 @@ void CalcPCA(uint3 id : SV_DispatchThreadID)
         // Normalize
         A /= eig.x;
 
-        principle[id.x*4+0] = A._11_12_13;
-        principle[id.x*4+1] = A._21_22_23;
-        principle[id.x*4+2] = A._31_32_33;
+        // principle[id.x*4+0] = A._11_12_13;
+        // principle[id.x*4+1] = A._21_22_23;
+        // principle[id.x*4+2] = A._31_32_33;
         principle[id.x*4+3] = m.xyz;
 
+        float3 va = normalize(mul(A2, A3._11_21_31));
+        float3 vb = normalize(mul(A1, A3._11_21_31));
+
         // @Todo: Check if it's zero.
-        // principle[id.x*4+0] = normalize(mul(A2, A3._11_21_31));
-        // principle[id.x*4+1] = normalize(mul(A1, A3._11_21_31));
-        // principle[id.x*4+2] = normalize(mul(A1, A2._11_21_31));
+        float3x3 M = float3x3(
+            va,
+            eig.y / eig.x * vb,
+            eig.z / eig.x * cross(va, vb)
+        );
+        // Transpose M
+        principle[id.x*4+0] = M._11_21_31;
+        principle[id.x*4+1] = M._12_22_32;
+        principle[id.x*4+2] = M._13_23_33;
     }
     else {
         const float dropletScale = 0.33;

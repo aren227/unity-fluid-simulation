@@ -272,11 +272,13 @@ Shader "Spheres"
                 float radiusSqr = pow(radius*4, 2);
                 if (distSqr >= radiusSqr) discard;
 
+                mInv = mul(transpose(mInv), mInv);
+
                 float weight = pow(1 - distSqr / radiusSqr, 3);
 
                 float3 centered = worldPos - i.spherePos.xyz;
-                float3 normal = -6 * pow(1 - distSqr / radiusSqr, 2) / radiusSqr * centered;
-                normal = mul(normal, mInv);
+                float3 grad = mul(mInv, centered) + mul(centered, mInv);
+                float3 normal = grad * weight;
 
                 output2 o;
                 o.normal = float4(normal, weight);
@@ -337,7 +339,7 @@ Shader "Spheres"
                 if (d == 0) discard;
 
                 if (normal.w > 0) {
-                    normal.xyz = -normalize(normal.xyz);
+                    normal.xyz = normalize(normal.xyz);
                     densitySpeed /= normal.w;
                 }
 
