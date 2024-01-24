@@ -194,7 +194,7 @@ public class Solver : MonoBehaviour
         hashValueDebugBuffer = new ComputeBuffer(numParticles, 4 * 3);
 
         meanBuffer = new ComputeBuffer(numParticles, 4 * 4);
-        covBuffer = new ComputeBuffer(numParticles, 4 * 3 * 2);
+        covBuffer = new ComputeBuffer(numParticles * 2, 4 * 3);
         principleBuffer = new ComputeBuffer(numParticles * 4, 4 * 3);
         hashRangeBuffer = new ComputeBuffer(numHashes, 4 * 2);
 
